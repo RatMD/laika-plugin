@@ -1,7 +1,7 @@
 LAIKA for OctoberCMS
 ====================
 
-> ![CAUTION]
+> [!CAUTION]
 > This is an experimental OctoberCMS extension and may change at any time. Use it with care and
 > expect breaking changes.
 
