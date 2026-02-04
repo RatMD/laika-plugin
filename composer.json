@@ -1,3 +1,40 @@
 {
-
+    "name": "ratmd/laika-plugin",
+    "type": "october-plugin",
+    "version": "0.1.0",
+    "description": "An Inertia-inspired Vue/Vite adapter for OctoberCMS that brings its Components and Snippets into modern Vue hydration without losing compatibility with existing plugins.",
+    "keywords": [
+        "october",
+        "octobercms",
+        "inertia",
+        "vue",
+        "bridge"
+    ],
+    "homepage": "https://octobercms.com/plugin/ratmd-laika",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Sam",
+            "email": "sam@rat.md",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "email": "info@rat.md",
+        "issues": "https://www.github.com/RatMD/laika-plugin/issues",
+        "source": "https://www.github.com/RatMD/laika-plugin"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "require": {
+        "php": ">= 8.2",
+        "composer/installers": "~2.0"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/installers": true
+        }
+    }
 }

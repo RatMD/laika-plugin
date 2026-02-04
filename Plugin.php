@@ -2,10 +2,21 @@
 
 namespace RatMD\Laika;
 
+use Cms\Classes\Controller;
+use Cms\Classes\Theme;
 use Illuminate\Foundation\Vite;
+use Illuminate\Support\Facades\App;
+use October\Rain\Support\Facades\Event;
+use RatMD\Laika\Classes\LaikaFactory;
+use RatMD\Laika\Classes\TwigFunctions;
+use RatMD\Laika\Twig\Extension;
 use System\Classes\PluginBase;
-use Twig\Markup;
+use Twig\Environment;
 
+/**
+ * Plugin Information File
+ * @link https://docs.octobercms.com/3.x/extend/system/plugins.html
+ */
 class Plugin extends PluginBase
 {
     /**
@@ -15,8 +26,7 @@ class Plugin extends PluginBase
     public $require = [ ];
 
     /**
-     * Provide some basic details about this plugin.
-     * @return array
+     * @inheritDoc
      */
     public function pluginDetails()
     {
@@ -24,45 +34,33 @@ class Plugin extends PluginBase
             'name'          => 'Laika',
             'description'   => 'An inertia.js inspired Vue/Vite Adapter for OctoberCMS.',
             'author'        => 'rat.md',
-            'icon'          => 'icon-refresh'
+            'icon'          => 'icon-paw'
         ];
     }
 
     /**
-     * Register method, called when the plugin is first registered.
-     * @return void
+     * @inheritDoc
      */
     public function register()
     {
+        $this->app->singleton(LaikaFactory::class);
 
+        $this->app->singleton(Vite::class, function () {
+            $theme = Theme::getActiveTheme()->getDirName();
+            $vite = new Vite;
+            $vite->useBuildDirectory(themes_path("{$theme}/assets/build"));
+            $vite->useHotFile(themes_path("{$theme}/assets/.hot"));
+            return $vite;
+        });
     }
 
     /**
-     * Boot method, called right before the request route.
-     * @return void
+     * @inheritDoc
      */
     public function boot()
     {
-
-    }
-
-    /**
-     * RegisterMarkupTags registers Twig markup tags introduced by this package.
-     * @return array
-     */
-    public function registerMarkupTags()
-    {
-        return [
-            'functions' => [
-                'laika' => function () {
-
-                },
-                'vite'  => function ($entries = [], $buildDir = null) {
-                    $vite = app(Vite::class);
-                    $html = $vite($entries, $buildDir)->toHtml();
-                    return new Markup($html, 'UTF-8');
-                },
-            ],
-        ];
+        Event::listen('cms.extendTwig', function (Environment $twig) {
+            $twig->addExtension(new Extension);
+        });
     }
 }
