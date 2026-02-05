@@ -29,7 +29,7 @@ class Plugin extends PluginBase
     {
         return [
             'name'          => 'Laika',
-            'description'   => 'An inertia.js inspired Vue/Vite Adapter for OctoberCMS.',
+            'description'   => 'LAIKA is an Inertia-inspired Vue/Vite adapter which lets you build your entire OctoberCMS theme in Vue while still using everything October provides.',
             'author'        => 'rat.md',
             'icon'          => 'icon-paw'
         ];

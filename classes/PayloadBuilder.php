@@ -2,7 +2,11 @@
 
 namespace RatMD\Laika\Classes;
 
-use Illuminate\Contracts\Support\Arrayable;
+use Cms\Classes\Controller;
+use Cms\Classes\Layout;
+use Cms\Classes\Page;
+use Cms\Classes\Theme;
+use Cms\Classes\ThisVariable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Js;
 use October\Rain\Support\Arr;
@@ -24,10 +28,10 @@ class PayloadBuilder
     protected array $head = [];
 
     /**
-     * Extra props for page payload.
+     * Page properties for this payload.
      * @var array<string,mixed>
      */
-    protected array $extraProps = [];
+    protected array $pageProps = [];
 
     /**
      * Custom component resolver override (optional).
@@ -80,7 +84,7 @@ class PayloadBuilder
      */
     public function withProps(array $props): self
     {
-        $this->extraProps = array_replace_recursive($this->extraProps, $props);
+        $this->pageProps = array_replace_recursive($this->pageProps, $props);
         return $this;
     }
 
@@ -103,9 +107,19 @@ class PayloadBuilder
      */
     public function fromTwigContext(array $context, ?string $version = null): array
     {
+        /** @var ThisVariable */
         $thisObj = Arr::get($context, 'this');
+
+        /** @var ?Controller */
+        $ctrl = Arr::get($context, 'this.controller') ?? Arr::get($context, 'controller');
+
+        /** @var ?Page */
         $page = Arr::get($context, 'this.page') ?? Arr::get($context, 'page');
+
+        /** @var ?Layout */
         $layout = Arr::get($context, 'this.layout') ?? Arr::get($context, 'layout');
+
+        /** @var ?Theme */
         $theme = Arr::get($context, 'this.theme') ?? Arr::get($context, 'theme');
 
         // URL
@@ -125,12 +139,17 @@ class PayloadBuilder
             ?? $this->readObjectProp($page, 'baseFileName')
             ?? null;
 
-        // Page title/meta
+        // PageHeader
         $title = $this->readObjectProp($page, 'title')
             ?? $this->readObjectProp($page, 'meta_title')
             ?? null;
         $metaTitle = $this->readObjectProp($page, 'meta_title') ?? $title;
         $metaDescription = $this->readObjectProp($page, 'meta_description') ?? null;
+        $head = array_replace_recursive([
+            'title'             => $title,
+            'meta_title'        => $metaTitle,
+            'meta_description'  => $metaDescription,
+        ], $this->head);
 
         // Theme/layout identifiers
         $themeId  = $this->readObjectProp($theme, 'id') ?? $this->readObjectProp($theme, 'getDirName') ?? null;
@@ -139,42 +158,24 @@ class PayloadBuilder
         // Component name (Vue page SFC)
         $component = $this->resolveComponentName($context, $page, $pageFileName);
 
-        // Shared props snapshot
-        $shared = $this->shared->toArray();
-
-        // Head payload (keep it simple, you can extend later)
-        $head = array_replace_recursive([
-            'title' => $metaTitle,
-            'meta' => array_values(array_filter([
-                $metaDescription ? ['name' => 'description', 'content' => $metaDescription] : null,
-            ])),
-        ], $this->head);
-
         // Core page payload
         $payload = [
-            'url'       => $url,
             'component' => $component,
             'version'   => $version,
-            'page'      => array_filter([
-                'id'              => $pageId,
-                'file'            => $pageFileName,
-                'title'           => $title,
-                'meta_title'      => $metaTitle,
-                'meta_description'=> $metaDescription,
-                'layout'          => $layoutId,
-                'theme'           => $themeId,
-                'locale'          => $locale,
-            ], fn ($v) => !is_null($v) && $v !== ''),
-            'props'     => array_replace_recursive([
-                'shared' => $shared,
-                'page'   => [
-                    'url'       => $url,
-                    'component' => $component,
-                    'locale'    => $locale,
-                ],
-            ], $this->extraProps),
-            'fragments' => (object) $this->fragments,
-            'head'      => $head,
+            'page'      => [
+                'id'        => $pageId,
+                'url'       => $url,
+                'file'      => $pageFileName,
+                'title'     => $title,
+                'head'      => $head,
+                'content'   => empty($ctrl) ? null : $ctrl->renderPage(),
+                'layout'    => $layoutId,
+                'theme'     => $themeId,
+                'locale'    => $locale,
+            ],
+            'pageProps'     => $this->pageProps,
+            'sharedProps'   => $this->shared->toArray(),
+            'fragments'     => (object) $this->fragments,
         ];
 
         return $payload;
@@ -220,7 +221,7 @@ class PayloadBuilder
             $file = Str::after($file, 'pages/');
         }
 
-        // Fallback if we really have nothing
+        // Fallback
         if (!$file) {
             return 'Unknown';
         }

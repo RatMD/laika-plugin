@@ -1,11 +1,14 @@
-LAIKA for OctoberCMS
-====================
+LAIKA Plugin for OctoberCMS
+===========================
 
 > [!CAUTION]
 > This is an experimental OctoberCMS extension and may change at any time. Use it with care and
 > expect breaking changes.
 
-Laika is a lightweight bridge that lets OctoberCMS breathe the same modern frontend air as a
+**LAIKA** lets you build your entire OctoberCMS theme in Vue while still using everything October
+provides, including Components, Partials, Content blocks, and Snippets.
+
+**LAIKA** is a lightweight bridge that lets OctoberCMS breathe the same modern frontend air as a
 Vite-powered Vue application. Instead of abandoning October’s native templating ecosystem, Laika
 brings Components, Content Blocks, and Snippets straight into the Vue runtime, where they behave
 like first-class citizens.
@@ -19,12 +22,10 @@ In short: October keeps doing its thing, Vue keeps doing its thing, and Laika du
 together so you can build modern interfaces without rewriting your entire project by still using
 the same OctoberCMS plugins.
 
-
 ## Requirements
 
 - PHP 8.2+
 - OctoberCMS 4.0+
-
 
 ## Copyright
 
