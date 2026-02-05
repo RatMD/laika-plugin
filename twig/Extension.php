@@ -4,6 +4,7 @@ namespace RatMD\Laika\Twig;
 
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\Js;
+use RatMD\Laika\Classes\PayloadBuilder;
 use Twig\Extension\AbstractExtension;
 use Twig\Markup;
 
@@ -29,17 +30,9 @@ class Extension extends AbstractExtension
      */
     public function laikaHeadFunction(array $context = [])
     {
-        $data = [
-            'url' => '/',
-            'page' => [],
-            'shared' => [],
-            'fragments' => [],
-            'version' => '0.1.0-dev',
-        ];
-
-        $html  = '<script type="text/json" data-laika>';
-        $html .= Js::encode($data);
-        $html .= '</script>';
+        $builder = app(PayloadBuilder::class);
+        $payload = $builder->fromTwigContext($context, '0.1.0-dev');
+        $html = $builder->toScriptTag($payload);
         return new Markup($html, 'UTF-8');
     }
 
@@ -66,6 +59,7 @@ class Extension extends AbstractExtension
             $context['__laika_vite_entrypoints_parameter'],
             $context['__laika_vite_buildDir_parameter'],
         )->toHtml();
+        $html = str_replace("[::]", parse_url(url('/'), \PHP_URL_HOST), $html);
         return new Markup($html, 'UTF-8');
     }
 }

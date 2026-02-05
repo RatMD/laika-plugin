@@ -1,0 +1,29 @@
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "lib": ["ES2022", "DOM"],
+        "outDir": "assets/dist",
+        "declaration": true,
+        "declarationMap": true,
+        "declarationDir": "assets/dist",
+        "emitDeclarationOnly": false,
+        "stripInternal": true,
+        "rootDir": "resources",
+        "resolveJsonModule": true,
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "skipLibCheck": true,
+        "sourceMap": true,
+        "exactOptionalPropertyTypes": true,
+        "strictNullChecks": true,
+        "noUncheckedIndexedAccess": true,
+        "noEmit": true,
+        "types": [],
+        "baseUrl": "."
+    },
+    "include": [
+        "resources"
+    ]
+}

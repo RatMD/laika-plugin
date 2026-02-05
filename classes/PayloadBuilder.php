@@ -1,0 +1,270 @@
+<?php declare(strict_types=1);
+
+namespace RatMD\Laika\Classes;
+
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Http\Request;
+use Illuminate\Support\Js;
+use October\Rain\Support\Arr;
+use October\Rain\Support\Str;
+use RatMD\Laika\Support\Shared;
+
+class PayloadBuilder
+{
+    /**
+     * Optional HTML fragments that can be shipped to the client.
+     * @var array<string,string>
+     */
+    protected array $fragments = [];
+
+    /**
+     * Optional head payload.
+     * @var array<string,mixed>
+     */
+    protected array $head = [];
+
+    /**
+     * Extra props for page payload.
+     * @var array<string,mixed>
+     */
+    protected array $extraProps = [];
+
+    /**
+     * Custom component resolver override (optional).
+     * @var callable|null
+     */
+    protected $componentResolver = null;
+
+    /**
+     *
+     * @param Shared $shared
+     * @param Request $request
+     * @return void
+     */
+    public function __construct(
+        protected readonly Shared $shared,
+        protected readonly Request $request,
+    ) {}
+
+    /**
+     * Add/override HTML fragments.
+     * @param array<string,string> $fragments
+     * @return self
+     */
+    public function withFragments(array $fragments): self
+    {
+        foreach ($fragments as $key => $html) {
+            if (is_string($key) && is_string($html)) {
+                $this->fragments[$key] = $html;
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Add/override head payload.
+     * @param array<string,mixed> $head
+     * @return self
+     */
+    public function withHead(array $head): self
+    {
+        $this->head = array_replace_recursive($this->head, $head);
+        return $this;
+    }
+
+    /**
+     * Add extra props into payload.props (page-specific).
+     * @param array<string,mixed> $props
+     * @return self
+     */
+    public function withProps(array $props): self
+    {
+        $this->extraProps = array_replace_recursive($this->extraProps, $props);
+        return $this;
+    }
+
+    /**
+     * Override how the Vue page component name is resolved.
+     * Signature: function(array $context, mixed $page): string
+     */
+    public function resolveComponentUsing(callable $resolver): self
+    {
+        $this->componentResolver = $resolver;
+        return $this;
+    }
+
+    /**
+     * Build payload from October Twig context.
+     *
+     * @param array $context Twig context as provided to Twig functions.
+     * @param string|null $version Optional version string (vite build hash, plugin version, etc.)
+     * @return array<string,mixed>
+     */
+    public function fromTwigContext(array $context, ?string $version = null): array
+    {
+        $thisObj = Arr::get($context, 'this');
+        $page = Arr::get($context, 'this.page') ?? Arr::get($context, 'page');
+        $layout = Arr::get($context, 'this.layout') ?? Arr::get($context, 'layout');
+        $theme = Arr::get($context, 'this.theme') ?? Arr::get($context, 'theme');
+
+        // URL
+        $url = $this->request->getRequestUri();
+
+        // Locale
+        $locale =
+            Arr::get($context, 'this.locale')
+            ?? Arr::get($context, 'locale')
+            ?? (method_exists($thisObj, 'getLocale') ? $thisObj->getLocale() : null)
+            ?? app()->getLocale();
+
+        // Page identity / file name
+        $pageId = $this->readObjectProp($page, 'id') ?? $this->readObjectProp($page, 'baseFileName') ?? null;
+        $pageFileName = $this->readObjectProp($page, 'fileName')
+            ?? $this->readObjectProp($page, 'file_name')
+            ?? $this->readObjectProp($page, 'baseFileName')
+            ?? null;
+
+        // Page title/meta
+        $title = $this->readObjectProp($page, 'title')
+            ?? $this->readObjectProp($page, 'meta_title')
+            ?? null;
+        $metaTitle = $this->readObjectProp($page, 'meta_title') ?? $title;
+        $metaDescription = $this->readObjectProp($page, 'meta_description') ?? null;
+
+        // Theme/layout identifiers
+        $themeId  = $this->readObjectProp($theme, 'id') ?? $this->readObjectProp($theme, 'getDirName') ?? null;
+        $layoutId = $this->readObjectProp($layout, 'id') ?? $this->readObjectProp($layout, 'baseFileName') ?? null;
+
+        // Component name (Vue page SFC)
+        $component = $this->resolveComponentName($context, $page, $pageFileName);
+
+        // Shared props snapshot
+        $shared = $this->shared->toArray();
+
+        // Head payload (keep it simple, you can extend later)
+        $head = array_replace_recursive([
+            'title' => $metaTitle,
+            'meta' => array_values(array_filter([
+                $metaDescription ? ['name' => 'description', 'content' => $metaDescription] : null,
+            ])),
+        ], $this->head);
+
+        // Core page payload
+        $payload = [
+            'url'       => $url,
+            'component' => $component,
+            'version'   => $version,
+            'page'      => array_filter([
+                'id'              => $pageId,
+                'file'            => $pageFileName,
+                'title'           => $title,
+                'meta_title'      => $metaTitle,
+                'meta_description'=> $metaDescription,
+                'layout'          => $layoutId,
+                'theme'           => $themeId,
+                'locale'          => $locale,
+            ], fn ($v) => !is_null($v) && $v !== ''),
+            'props'     => array_replace_recursive([
+                'shared' => $shared,
+                'page'   => [
+                    'url'       => $url,
+                    'component' => $component,
+                    'locale'    => $locale,
+                ],
+            ], $this->extraProps),
+            'fragments' => (object) $this->fragments,
+            'head'      => $head,
+        ];
+
+        return $payload;
+    }
+
+    /**
+     * Render the payload as an embedded JSON script tag (for {% laikaHead %}).
+     * @param array $payload
+     * @return string
+     */
+    public function toScriptTag(array $payload, string $attr = 'data-laika="payload"'): string
+    {
+        return '<script type="application/json" ' . $attr . '>'
+            . Js::encode($payload)
+            . '</script>';
+    }
+
+    /**
+     * Default component name resolver
+     * @param array $context
+     * @param mixed $page
+     * @param ?string $pageFileName
+     * @return string
+     */
+    protected function resolveComponentName(array $context, mixed $page, ?string $pageFileName): string
+    {
+        if (is_callable($this->componentResolver)) {
+            $name = (string) call_user_func($this->componentResolver, $context, $page);
+            $name = trim($name);
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        $file = $pageFileName;
+
+        // Normalize file name
+        $file = $file ? str_replace('\\', '/', $file) : null;
+        $file = $file ? preg_replace('/\.htm(l)?$/i', '', $file) : null;
+
+        // Strip leading "pages/" if present
+        if ($file && Str::startsWith($file, 'pages/')) {
+            $file = Str::after($file, 'pages/');
+        }
+
+        // Fallback if we really have nothing
+        if (!$file) {
+            return 'Unknown';
+        }
+
+        // Convert path segments to StudlyCase
+        $segments = array_values(array_filter(explode('/', $file), fn ($s) => trim($s) !== ''));
+        $segments = array_map(fn ($s) => Str::studly($s), $segments);
+
+        return implode('/', $segments) ?: 'Unknown';
+    }
+
+    /**
+     * Read property or method return from an object.
+     * @param mixed $obj
+     * @param string $prop
+     * @return mixed
+     */
+    protected function readObjectProp(mixed $obj, string $prop): mixed
+    {
+        if (!is_object($obj)) {
+            return null;
+        }
+
+        if (isset($obj->{$prop})) {
+            return $obj->{$prop};
+        }
+
+        if (method_exists($obj, $prop)) {
+            try {
+                return $obj->{$prop}();
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        $getter = 'get' . Str::studly($prop);
+        if (method_exists($obj, $getter)) {
+            try {
+                return $obj->{$getter}();
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        return null;
+    }
+}

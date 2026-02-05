@@ -1,0 +1,48 @@
+{
+    "name": "@ratmd/laika-plugin",
+    "version": "0.1.0",
+    "description": "An Inertia-inspired Vue/Vite adapter for OctoberCMS that brings its Components and Snippets into modern Vue hydration without losing compatibility with existing plugins.",
+    "author": "Sam <sam@rat.md> (https://rat.md)",
+    "keywords": [
+        "octobercms"
+    ],
+    "type": "module",
+    "main": "./assets/dist/index.cjs",
+    "module": "./assets/dist/index.js",
+    "types": "./assets/dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./assets/dist/laika.d.ts",
+            "import": "./assets/dist/laika.mjs",
+            "require": "./assets/dist/laika.cjs"
+        }
+    },
+    "scripts": {
+        "build": "rimraf dist && rollup -c",
+        "watch": "rollup -c -w",
+        "type-check": "tsc --noEmit -p tsconfig.json --composite false"
+    },
+    "license": "MIT",
+    "private": true,
+    "devDependencies": {
+        "@rollup/plugin-commonjs": "^29.0.0",
+        "@rollup/plugin-node-resolve": "^16.0.3",
+        "@rollup/plugin-terser": "0.4.4",
+        "@rollup/plugin-typescript": "^12.3.0",
+        "@types/node": "^24.8.0",
+        "rimraf": "^6.1.2",
+        "rollup": "^4.53.3",
+        "rollup-plugin-dts": "^6.2.3",
+        "tslib": "^2.8.1",
+        "typescript": "^5.9.3",
+        "vue": "^3.5.27"
+    },
+    "peerDependencies": {
+        "vue": "^3.5.0"
+    },
+    "peerDependenciesMeta": {
+        "vue": {
+            "optional": true
+        }
+    }
+}
