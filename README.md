@@ -9,18 +9,20 @@ LAIKA Plugin for OctoberCMS
 provides, including Components, Partials, Content blocks, and Snippets.
 
 **LAIKA** is a lightweight bridge that lets OctoberCMS breathe the same modern frontend air as a
-Vite-powered Vue application. Instead of abandoning October’s native templating ecosystem, Laika
+Vite-powered Vue application. Instead of abandoning October’s native templating ecosystem, **LAIKA**
 brings Components, Content Blocks, and Snippets straight into the Vue runtime, where they behave
 like first-class citizens.
 
 It provides a familiar Inertia-style workflow, but without forcing you into a full SPA cage.
 Server-rendered October content and dynamic Vue components coexist, share data, and actually get
-along. Laika handles hydration, Vite bundling, and HMR so you can iterate instantly without losing
-the benefits of October’s CMS layer.
+along. **LAIKA** handles hydration, Vite bundling, and HMR so you can iterate instantly without
+losing the benefits of October’s CMS layer.
 
-In short: October keeps doing its thing, Vue keeps doing its thing, and Laika duct-tapes the two
+In short: October keeps doing its thing, Vue keeps doing its thing, and **LAIKA** duct-tapes the two
 together so you can build modern interfaces without rewriting your entire project by still using
 the same OctoberCMS plugins.
+
+Inspired by [Inertia](https://github.com/inertiajs).
 
 ## Requirements
 
