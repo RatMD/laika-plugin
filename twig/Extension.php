@@ -3,6 +3,7 @@
 namespace RatMD\Laika\Twig;
 
 use Illuminate\Foundation\Vite;
+use Illuminate\Support\Js;
 use Twig\Extension\AbstractExtension;
 use Twig\Markup;
 
@@ -28,7 +29,17 @@ class Extension extends AbstractExtension
      */
     public function laikaHeadFunction(array $context = [])
     {
-        $html = '';
+        $data = [
+            'url' => '/',
+            'page' => [],
+            'shared' => [],
+            'fragments' => [],
+            'version' => '0.1.0-dev',
+        ];
+
+        $html  = '<script type="text/json" data-laika>';
+        $html .= Js::encode($data);
+        $html .= '</script>';
         return new Markup($html, 'UTF-8');
     }
 

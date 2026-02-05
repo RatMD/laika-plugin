@@ -2,13 +2,10 @@
 
 namespace RatMD\Laika;
 
-use Cms\Classes\Controller;
 use Cms\Classes\Theme;
 use Illuminate\Foundation\Vite;
-use Illuminate\Support\Facades\App;
 use October\Rain\Support\Facades\Event;
 use RatMD\Laika\Classes\LaikaFactory;
-use RatMD\Laika\Classes\TwigFunctions;
 use RatMD\Laika\Twig\Extension;
 use System\Classes\PluginBase;
 use Twig\Environment;
