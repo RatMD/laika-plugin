@@ -7,7 +7,6 @@ use Cms\Classes\Controller;
 use Cms\Classes\Page;
 use Cms\Classes\Theme;
 use Illuminate\Foundation\Vite;
-use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Facades\Response;
 use October\Rain\Support\Facades\Event;
@@ -64,8 +63,7 @@ class Plugin extends PluginBase
      */
     public function boot()
     {
-        // @todo find a better solution to receive the component properties.
-        //       using multiple [staticMenu alias] components overwrites the pageObj
+        // @todo Find a sane way to isolate component instance properties.
         ComponentBase::extend(function($component) {
             $component->addDynamicMethod('getPageVars', function() use ($component) {
                 $ref = new \ReflectionObject($component);
@@ -78,6 +76,9 @@ class Plugin extends PluginBase
                     $ref = $ref->getParentClass();
                 }
 
+
+                // @todo Multiple [component alias] components currently collide and overwrite the
+                //       pageObj properties. Temporary, but ugly & unstable workaround:
                 if (!isset($pageObj) || !is_object($pageObj)) {
                     return [];
                 } else {
@@ -104,6 +105,8 @@ class Plugin extends PluginBase
             $twig->addExtension(new Extension);
         });
 
+        // @todo Add a X-Laika-Partial | X-Laika-Only solution to update just specific props,
+        //       instead of the full json payload.
         Event::listen('cms.page.display', function (Controller $controller, string $url, Page $page, $result) {
             if (!Request::header('X-Laika')) {
                 return null;
