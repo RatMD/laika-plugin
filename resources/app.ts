@@ -19,8 +19,11 @@ import {
     reactive,
     ref,
     shallowRef,
+    Fragment,
 } from "vue";
+import { ProgressBar } from "./components";
 import { unwrapModule } from "./utils";
+import { useProgressBar } from "./progress";
 
 
 // States
@@ -75,6 +78,9 @@ export const App: LaikaAppComponent = defineComponent({
     setup({ initialPayload, initialComponent, resolveComponent, title: titleCallback }) {
         payload.value = initialPayload;
         key.value = void 0;
+
+        // Composable
+        const progress = useProgressBar();
 
         // Set Component
         component.value = initialComponent ? markRaw(unwrapModule<ResolvedComponent>(initialComponent)) : void 0;
@@ -138,14 +144,22 @@ export const App: LaikaAppComponent = defineComponent({
         runtime.payload = () => payload.value;
         runtime.page = () => payload.value?.page;
         runtime.visit = async (url: string, opts?: { replace?: boolean, preserveState?: boolean }) => {
-            if (opts?.replace) {
-                history.replaceState({}, "", url);
-            } else {
-                history.pushState({}, "", url);
-            }
+            progress.start();
 
-            const nextPayload = await fetchPayload(url);
-            await swap(nextPayload, opts?.preserveState);
+            try {
+                if (opts?.replace) {
+                    history.replaceState({}, "", url);
+                } else {
+                    history.pushState({}, "", url);
+                }
+
+                const nextPayload = await fetchPayload(url);
+                await swap(nextPayload, opts?.preserveState);
+                progress.done();
+            } catch (err) {
+                console.error(err);
+                progress.fail();
+            }
         };
         runtime.request = async (handler: string, data?: Record<string, unknown>) => ({ handler, data });
         runtime.setLayout = (next: any) => {
@@ -170,19 +184,27 @@ export const App: LaikaAppComponent = defineComponent({
                 layout.value = null;
             }
 
+            // Get User Component
+            let userComponent: VNode;
+
             const childLayout = component.value.layout;
             if (!childLayout) {
-                return child;
-            }
-            if (typeof childLayout === "function") {
-                return childLayout(h, child);
+                userComponent = child;
+            } else if (typeof childLayout === "function") {
+                userComponent = childLayout(h, child);
+            } else {
+                const layouts = (Array.isArray(childLayout) ? childLayout : [childLayout]) as any[];
+                userComponent = layouts
+                    .slice()
+                    .reverse()
+                    .reduce<VNode>((acc, L) => h(L, { ...(props as any) }, () => acc), child as any);
             }
 
-            const layouts = (Array.isArray(childLayout) ? childLayout : [childLayout]) as any[];
-            return layouts
-                .slice()
-                .reverse()
-                .reduce<VNode>((acc, L) => h(L, { ...(props as any) }, () => acc), child as any);
+            // Render
+            return h(Fragment, null, [
+                h(ProgressBar),
+                userComponent,
+            ]);
         };
     },
 });
