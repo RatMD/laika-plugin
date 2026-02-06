@@ -2,10 +2,7 @@
 
 namespace RatMD\Laika\Twig;
 
-use Cms\Classes\Theme;
 use Illuminate\Foundation\Vite;
-use October\Rain\Support\Facades\File;
-use October\Rain\Support\Facades\Yaml;
 use RatMD\Laika\Classes\PayloadBuilder;
 use Twig\Extension\AbstractExtension;
 use Twig\Markup;
@@ -32,24 +29,8 @@ class Extension extends AbstractExtension
      */
     public function laikaHeadFunction(array $context = [])
     {
-        $activeTheme = Theme::getActiveTheme();
-        $versionPath = $activeTheme->getPath().'/version.yaml';
-        $version = null;
-        if (File::exists($versionPath)) {
-            $versions = (array) Yaml::parseFileCached($versionPath);
-            if (!empty($versions)) {
-                $version = array_key_last($versions);
-            }
-        }
-        if (empty($version)) {
-            $version = 'dev-master';
-        }
-
-        /** @var PayloadBuilder $builder */
-        $builder = app(PayloadBuilder::class);
-        $payload = $builder->fromTwigContext($context, $version);
-        $html = $builder->toScriptTag($payload);
-        return new Markup($html, 'UTF-8');
+        $builder = PayloadBuilder::fromTwigContext($context);
+        return new Markup($builder->toScriptTag(), 'UTF-8');
     }
 
     /**

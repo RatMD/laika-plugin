@@ -8,226 +8,105 @@ use Cms\Classes\Layout;
 use Cms\Classes\Page;
 use Cms\Classes\Theme;
 use Cms\Classes\ThisVariable;
-use Illuminate\Http\Request;
+use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Support\Js;
+use October\Rain\Support\Facades\File;
+use October\Rain\Support\Facades\Yaml;
 use October\Rain\Support\Arr;
 use October\Rain\Support\Str;
 use RatMD\Laika\Support\Shared;
 
-class PayloadBuilder
+class PayloadBuilder implements Arrayable
 {
     /**
-     * Optional HTML fragments that can be shipped to the client.
-     * @var array<string,string>
+     * Page Content
+     * @var mixed
      */
-    protected array $fragments = [];
-
-    /**
-     * Optional head payload.
-     * @var array<string,mixed>
-     */
-    protected array $head = [];
-
-    /**
-     * Page properties for this payload.
-     * @var array<string,mixed>
-     */
-    protected array $pageProps = [];
-
-    /**
-     * Custom component resolver override (optional).
-     * @var callable|null
-     */
-    protected $componentResolver = null;
-
-    /**
-     *
-     * @param Shared $shared
-     * @param Request $request
-     * @return void
-     */
-    public function __construct(
-        protected readonly Shared $shared,
-        protected readonly Request $request,
-    ) {}
-
-    /**
-     * Add/override HTML fragments.
-     * @param array<string,string> $fragments
-     * @return self
-     */
-    public function withFragments(array $fragments): self
-    {
-        foreach ($fragments as $key => $html) {
-            if (is_string($key) && is_string($html)) {
-                $this->fragments[$key] = $html;
-            }
-        }
-
-        return $this;
-    }
-
-    /**
-     * Add/override head payload.
-     * @param array<string,mixed> $head
-     * @return self
-     */
-    public function withHead(array $head): self
-    {
-        $this->head = array_replace_recursive($this->head, $head);
-        return $this;
-    }
-
-    /**
-     * Add extra props into payload.props (page-specific).
-     * @param array<string,mixed> $props
-     * @return self
-     */
-    public function withProps(array $props): self
-    {
-        $this->pageProps = array_replace_recursive($this->pageProps, $props);
-        return $this;
-    }
-
-    /**
-     * Override how the Vue page component name is resolved.
-     * Signature: function(array $context, mixed $page): string
-     */
-    public function resolveComponentUsing(callable $resolver): self
-    {
-        $this->componentResolver = $resolver;
-        return $this;
-    }
+    protected $pageContent = null;
 
     /**
      * Build payload from October Twig context.
-     *
-     * @param array $context Twig context as provided to Twig functions.
-     * @param string|null $version Optional version string (vite build hash, plugin version, etc.)
-     * @return array<string,mixed>
+     * @param array $context
+     * @return static
      */
-    public function fromTwigContext(array $context, ?string $version = null): array
+    static public function fromTwigContext(array $context)
     {
-        /** @var ThisVariable */
-        $thisObj = Arr::get($context, 'this');
+        return new static(
+            thisVar: Arr::get($context, 'this'),
+            controller: Arr::get($context, 'this.controller') ?? Arr::get($context, 'controller'),
+            layout: Arr::get($context, 'this.layout') ?? Arr::get($context, 'layout'),
+            page: Arr::get($context, 'this.page') ?? Arr::get($context, 'page'),
+            theme: Arr::get($context, 'this.theme') ?? Arr::get($context, 'theme'),
+        );
+    }
 
-        /** @var ?Controller */
-        $ctrl = Arr::get($context, 'this.controller') ?? Arr::get($context, 'controller');
+    /**
+     *
+     * @param Controller $controller
+     * @return static
+     */
+    static public function fromController(Controller $controller, ?Page $page = null)
+    {
+        return new static(
+            controller: $controller,
+            page: $page,
+        );
+    }
 
-        /** @var ?Layout */
-        $layout = Arr::get($context, 'this.layout') ?? Arr::get($context, 'layout');
-        $layoutComponents = [];
-        if ($layout && !empty($layout->components)) {
-            foreach ($layout->components AS $key => $component) {
-                $alias = $component->alias ?: (string) $key;
-                $obj = Arr::get($context, $alias) ?? ($ctrl?->vars[$alias] ?? null) ?? $component;
-
-                /** @var ComponentBase $component */
-                $layoutComponents[$alias] = [
-                    'component' => $component->name,
-                    'alias'     => $component->alias,
-                    'class'     => get_class($component),
-                    'props'     => $component->getProperties(),
-                    'vars'      => $obj?->getPageVars(),
-                ];
-            }
+    /**
+     *
+     * @param null|ThisVariable $thisVar
+     * @param null|Controller $controller
+     * @param null|Layout $layout
+     * @param null|Page $page
+     * @param null|Theme $theme
+     * @param null|Shared $shared
+     * @return void
+     */
+    public function __construct(
+        protected ?ThisVariable $thisVar = null,
+        protected ?Controller $controller = null,
+        protected ?Layout $layout = null,
+        protected ?Page $page = null,
+        protected ?Theme $theme = null,
+        protected ?Shared $shared = null,
+    ) {
+        if (empty($thisVar) && !empty($controller)) {
+            $this->thisVar = $this->controller->vars['this'] ?? null;
         }
-
-        /** @var ?Page */
-        $page = Arr::get($context, 'this.page') ?? Arr::get($context, 'page');
-        $pageComponents = [];
-        if ($page && !empty($page->components)) {
-            foreach ($page->components AS $key => $component) {
-                $alias = $component->alias ?: (string) $key;
-                $obj = Arr::get($context, $alias) ?? ($ctrl?->vars[$alias] ?? null) ?? $component;
-
-                /** @var ComponentBase $component */
-                $pageComponents[$alias] = [
-                    'component' => $component->name,
-                    'alias'     => $component->alias,
-                    'class'     => get_class($component),
-                    'props'     => $component->getProperties(),
-                    'vars'      => $obj?->getPageVars(),
-                ];
-            }
+        if (empty($layout) && !empty($controller)) {
+            $this->layout = $controller->getLayout();
         }
-
-        /** @var ?Theme */
-        $theme = Arr::get($context, 'this.theme') ?? Arr::get($context, 'theme');
-        $themeConfig = $theme->getConfig();
-        $themeOptions = [];
-        $optionKeys = array_keys($theme->getFormConfig()['fields']);
-        foreach ($optionKeys AS $key) {
-            $themeOptions[$key] = $thisObj['theme']->{$key} ?? null;
+        if (empty($page) && !empty($controller)) {
+            $this->page = $controller->getPage();
         }
+        if (empty($theme) && !empty($controller)) {
+            $this->theme = $controller->getTheme();
+        }
+        if (empty($theme)) {
+            $this->theme = Theme::getActiveTheme();
+        }
+        if (empty($shared)) {
+            $this->shared = app(Shared::class);
+        }
+    }
 
-        // URL
-        $url = $this->request->getRequestUri();
-
-        // Locale
-        $locale =
-            Arr::get($context, 'this.locale')
-            ?? Arr::get($context, 'locale')
-            ?? (method_exists($thisObj, 'getLocale') ? $thisObj->getLocale() : null)
-            ?? app()->getLocale();
-
-        // Page identity / file name
-        $pageId = $this->readObjectProp($page, 'id') ?? $this->readObjectProp($page, 'baseFileName') ?? null;
-        $pageFileName = $this->readObjectProp($page, 'fileName')
-            ?? $this->readObjectProp($page, 'file_name')
-            ?? $this->readObjectProp($page, 'baseFileName')
-            ?? null;
-
-        // PageHeader
-        $title = $this->readObjectProp($page, 'title')
-            ?? $this->readObjectProp($page, 'meta_title')
-            ?? null;
-        $metaTitle = $this->readObjectProp($page, 'meta_title') ?? $title;
-        $metaDescription = $this->readObjectProp($page, 'meta_description') ?? null;
-        $head = array_replace_recursive([
-            'title'             => $title,
-            'meta_title'        => $metaTitle,
-            'meta_description'  => $metaDescription,
-        ], $this->head);
-
-        // Theme/layout identifiers
-        $themeId  = $this->readObjectProp($theme, 'id') ?? $this->readObjectProp($theme, 'getDirName') ?? null;
-        $layoutId = $this->readObjectProp($layout, 'id') ?? $this->readObjectProp($layout, 'baseFileName') ?? null;
-
-        // Component name (Vue page SFC)
-        $component = $this->resolveComponentName($context, $page, $pageFileName);
-
-        // Core page payload
-        $payload = [
-            'component' => $component,
-            'version'   => $version,
-            'theme'     => [
-                'name'          => $themeConfig['name'] ?? null,
-                'description'   => $themeConfig['description'] ?? null,
-                'homepage'      => $themeConfig['homepage'] ?? null,
-                'author'        => $themeConfig['author'] ?? null,
-                'authorCode'    => $themeConfig['authorCode'] ?? null,
-                'code'          => $themeConfig['code'] ?? null,
-                'options'       => $themeOptions,
-            ],
-            'page'      => [
-                'id'        => $pageId,
-                'url'       => $url,
-                'file'      => $pageFileName,
-                'title'     => $title,
-                'head'      => $head,
-                'content'   => empty($ctrl) ? null : $ctrl->renderPage(),
-                'layout'    => $layoutId,
-                'theme'     => $themeId,
-                'locale'    => $locale,
-            ],
-            'pageProps'     => $this->pageProps,
-            'sharedProps'   => $this->shared->toArray(),
-            'components'    => array_merge($layoutComponents, $pageComponents),
-            'fragments'     => (object) $this->fragments,
+    /**
+     *
+     * @return array
+     */
+    public function toArray(): array
+    {
+        return [
+            'component'     => $this->getComponent(),
+            'version'       => $this->getVersion(),
+            'theme'         => $this->getThemeDetails(),
+            'page'          => $this->getPageDetails(),
+            'pageProps'     => $this->getPageProps(),
+            'sharedProps'   => $this->getSharedProps(),
+            'components'    => $this->getComponents(),
+            'fragments'     => $this->getFragments(),
         ];
-
-        return $payload;
     }
 
     /**
@@ -235,86 +114,298 @@ class PayloadBuilder
      * @param array $payload
      * @return string
      */
-    public function toScriptTag(array $payload, string $attr = 'data-laika="payload"'): string
+    public function toScriptTag(string $attr = 'data-laika="payload"'): string
     {
         return '<script type="application/json" ' . $attr . '>'
-            . Js::encode($payload)
-            . '</script>';
+             . Js::encode($this->toArray())
+             . '</script>';
     }
 
     /**
-     * Default component name resolver
-     * @param array $context
-     * @param mixed $page
-     * @param ?string $pageFileName
-     * @return string
+     * Set Page Content
+     * @param mixed $content
+     * @return void
      */
-    protected function resolveComponentName(array $context, mixed $page, ?string $pageFileName): string
+    public function setPageContent(mixed $content)
     {
-        if (is_callable($this->componentResolver)) {
-            $name = (string) call_user_func($this->componentResolver, $context, $page);
-            $name = trim($name);
-            if ($name !== '') {
-                return $name;
-            }
-        }
-
-        $file = $pageFileName;
-
-        // Normalize file name
-        $file = $file ? str_replace('\\', '/', $file) : null;
-        $file = $file ? preg_replace('/\.htm(l)?$/i', '', $file) : null;
-
-        // Strip leading "pages/" if present
-        if ($file && Str::startsWith($file, 'pages/')) {
-            $file = Str::after($file, 'pages/');
-        }
-
-        // Fallback
-        if (!$file) {
-            return 'Unknown';
-        }
-
-        // Convert path segments to StudlyCase
-        $segments = array_values(array_filter(explode('/', $file), fn ($s) => trim($s) !== ''));
-        $segments = array_map(fn ($s) => Str::studly($s), $segments);
-
-        return implode('/', $segments) ?: 'Unknown';
+        $this->pageContent = $content;
     }
 
     /**
      * Read property or method return from an object.
      * @param mixed $obj
-     * @param string $prop
+     * @param string|string[] $prop
      * @return mixed
      */
-    protected function readObjectProp(mixed $obj, string $prop): mixed
+    protected function readObjectProperty(mixed $object, string|array $prop): mixed
     {
-        if (!is_object($obj)) {
+        if (!is_object($object)) {
             return null;
         }
 
-        if (isset($obj->{$prop})) {
-            return $obj->{$prop};
-        }
+        $props = is_string($prop) ? [$prop] : $prop;
 
-        if (method_exists($obj, $prop)) {
-            try {
-                return $obj->{$prop}();
-            } catch (\Throwable) {
-                return null;
+        foreach ($props AS $prop) {
+            if (isset($object->{$prop})) {
+                return $object->{$prop};
             }
-        }
 
-        $getter = 'get' . Str::studly($prop);
-        if (method_exists($obj, $getter)) {
-            try {
-                return $obj->{$getter}();
-            } catch (\Throwable) {
-                return null;
+            if (method_exists($object, $prop)) {
+                try {
+                    return $object->{$prop}();
+                } catch (\Throwable) {
+                    return null;
+                }
+            }
+
+            $getter = 'get' . Str::studly($prop);
+            if (method_exists($object, $getter)) {
+                try {
+                    return $object->{$getter}();
+                } catch (\Throwable) {
+                    return null;
+                }
             }
         }
 
         return null;
+    }
+
+    /**
+     *
+     * @return string
+     */
+    public function getComponent(): string
+    {
+        $file = $this->getPageDetails()['file'] ?? $this->page?->layout ?? null;
+        $file = $file ? str_replace('\\', '/', $file) : null;
+        $file = $file ? preg_replace('/\.htm(l)?$/i', '', $file) : null;
+        if ($file && Str::startsWith($file, 'pages/')) {
+            $file = Str::after($file, 'pages/');
+        }
+        if (!$file) {
+            return 'Unknown';
+        }
+
+        $segments = array_values(array_filter(explode('/', $file), fn ($s) => trim($s) !== ''));
+        $segments = array_map(fn ($s) => Str::studly($s), $segments);
+        return implode('/', $segments) ?: 'Unknown';
+    }
+
+    /**
+     *
+     * @return string|null
+     */
+    public function getVersion(): string|null
+    {
+        if (empty($this->theme)) {
+            return null;
+        }
+
+        $versionPath = $this->theme->getPath().'/version.yaml';
+        $version = null;
+        if (File::exists($versionPath)) {
+            $versions = (array) Yaml::parseFileCached($versionPath);
+            if (!empty($versions)) {
+                $version = array_key_last($versions);
+            }
+        }
+        return $version;
+    }
+
+    /**
+     *
+     * @return array
+     */
+    public function getThemeDetails(): array
+    {
+        $themeConfig = $this->theme?->getConfig() ?? [];
+        return [
+            'name'          => $themeConfig['name'] ?? null,
+            'description'   => $themeConfig['description'] ?? null,
+            'homepage'      => $themeConfig['homepage'] ?? null,
+            'author'        => $themeConfig['author'] ?? null,
+            'authorCode'    => $themeConfig['authorCode'] ?? null,
+            'code'          => $themeConfig['code'] ?? null,
+            'options'       => $this->getThemeOptions(),
+        ];
+    }
+
+    /**
+     *
+     * @return array
+     */
+    public function getThemeOptions(): array
+    {
+        if (empty($this->theme) || empty($this->thisVar)) {
+            return [];
+        }
+
+        $formConfig = $this->theme->getFormConfig();
+        if (empty($formConfig) || !array_key_exists('fields', $formConfig)) {
+            return [];
+        }
+
+        $keys = array_keys($formConfig['fields']);
+        $result = [];
+        foreach ($keys AS $key) {
+            $result[$key] = $this->thisVar['theme']->{$key} ?? null;
+        }
+        return $result;
+    }
+
+    /**
+     *
+     * @return array
+     */
+    public function getPageDetails(): array
+    {
+        $id = $this->readObjectProperty($this->page, ['id', 'baseFileName']);
+        $themeId = $this->readObjectProperty($this->theme, ['id', 'getDirName']);
+        $layoutId = $this->readObjectProperty($this->layout, ['id', 'baseFileName']);
+        $fileName = $this->readObjectProperty($this->page, ['fileName', 'file_name', 'baseFileName']);
+
+        $title = $this->readObjectProperty($this->page, ['title', 'meta_title']);
+        $metaTitle = $this->readObjectProperty($this->page, 'meta_title') ?? $title;
+        $metaDescription = $this->readObjectProperty($this->page, 'meta_description') ?? null;
+        $head = [
+            'title'             => $title,
+            'meta_title'        => $metaTitle,
+            'meta_description'  => $metaDescription,
+        ];
+
+        return [
+            'id'        => $id,
+            'url'       => request()->getRequestUri(),
+            'file'      => $fileName,
+            'title'     => $title,
+            'head'      => $head,
+            'content'   => $this->getPageContent(),
+            'theme'     => $themeId,
+            'layout'    => $layoutId,
+            'locale'    => $this->getLocale(),
+        ];
+    }
+
+    /**
+     *
+     * @return mixed
+     */
+    public function getPageContent(): mixed
+    {
+        if ($this->pageContent !== null) {
+            return $this->pageContent;
+        } else if (!empty($this->controller)) {
+            return $this->controller->renderPage();
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     *
+     * @return string
+     */
+    public function getLocale(): string
+    {
+        if (!empty($this->thisVar)) {
+            if (!empty($this->thisVar['locale'])) {
+                return $this->thisVar['locale'];
+            } else if (!empty($this->thisVar['getLocale']) && is_callable([$this->thisVar, 'getLocale'])) {
+                return $this->thisVar->getLocale();
+            }
+        }
+
+        return app()->getLocale();
+    }
+
+    /**
+     *
+     * @return array
+     */
+    public function getPageProps(): array
+    {
+        return [];
+    }
+
+    /**
+     *
+     * @return array
+     */
+    public function getSharedProps(): array
+    {
+        return $this->shared->toArray();
+    }
+
+    /**
+     *
+     * @return array
+     */
+    public function getComponents(): array
+    {
+        return array_merge($this->getLayoutComponents(), $this->getPageComponents());
+    }
+
+    /**
+     *
+     * @return array
+     */
+    public function getLayoutComponents(): array
+    {
+        if (empty($this->layout) || empty($this->layout->components)) {
+            return [];
+        }
+
+        $result = [];
+        /** @var ComponentBase $component */
+        foreach ($this->layout->components AS $key => $component) {
+            $alias = $component->alias ?: (string) $key;
+            $object = ($ctrl?->vars[$alias] ?? null) ?? $component;
+
+            $result[$alias] = [
+                'component' => $component->name,
+                'alias'     => $component->alias,
+                'class'     => get_class($component),
+                'props'     => $component->getProperties(),
+                'vars'      => $object?->getPageVars(),
+            ];
+        }
+        return $result;
+    }
+
+    /**
+     *
+     * @return array
+     */
+    public function getPageComponents(): array
+    {
+        if (empty($this->page) || empty($this->page->components)) {
+            return [];
+        }
+
+        $result = [];
+        /** @var ComponentBase $component */
+        foreach ($this->page->components AS $key => $component) {
+            $alias = $component->alias ?: (string) $key;
+            $object = ($ctrl?->vars[$alias] ?? null) ?? $component;
+
+            $result[$alias] = [
+                'component' => $component->name,
+                'alias'     => $component->alias,
+                'class'     => get_class($component),
+                'props'     => $component->getProperties(),
+                'vars'      => $object?->getPageVars(),
+            ];
+        }
+        return $result;
+    }
+
+    /**
+     *
+     * @return array
+     */
+    public function getFragments()
+    {
+        return [];
     }
 }

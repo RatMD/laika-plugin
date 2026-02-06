@@ -92,9 +92,21 @@ export const App: LaikaAppComponent = defineComponent({
          */
         async function fetchPayload(url: string) {
             const res = await fetch(url, {
-                headers: { Accept: "application/json", "X-Laika": "1" },
+                headers: {
+                    Accept: "application/json",
+                    "X-Laika": "1",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
                 credentials: "same-origin",
             });
+
+            if (res.status === 409) {
+                const loc = res.headers.get("X-Laika-Location");
+                if (loc) {
+                    window.location.assign(loc);
+                }
+                throw new Error("Laika redirect");
+            }
 
             if (!res.ok) {
                 window.location.assign(url);
@@ -110,7 +122,7 @@ export const App: LaikaAppComponent = defineComponent({
          * @param preserveState
          */
         async function swap(nextPayload: LaikaPayload, preserveState?: boolean) {
-            const mod = await Promise.resolve(resolveComponent(nextPayload.component));
+            const mod = await resolveComponent(nextPayload.component);
             component.value = markRaw(unwrapModule<ResolvedComponent>(mod));
             payload.value = nextPayload;
 
