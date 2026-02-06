@@ -52,14 +52,8 @@ class Plugin extends PluginBase
         $this->app->singleton(Vite::class, function () {
             $theme = Theme::getActiveTheme()->getDirName();
             $vite = new Vite;
-            $vite->createAssetPathsUsing(function (string $path, bool|null $secure) use ($theme) {
-                return asset(str_replace(
-                    "{$theme}/assets/build/",
-                    "{$theme}/assets/",
-                    $path
-                ));
-            });
-            $vite->useBuildDirectory("themes/{$theme}/assets/build");
+            $vite->useManifestFilename(".vite/manifest.json");
+            $vite->useBuildDirectory("themes/{$theme}/assets");
             $vite->useHotFile(themes_path("{$theme}/assets/.hot"));
             return $vite;
         });
