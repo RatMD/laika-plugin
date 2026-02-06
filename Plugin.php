@@ -2,10 +2,13 @@
 
 namespace RatMD\Laika;
 
+use Cms\Classes\ComponentBase;
 use Cms\Classes\Theme;
 use Illuminate\Foundation\Vite;
 use October\Rain\Support\Facades\Event;
+use RatMD\Laika\Behavior\DynamicComponent;
 use RatMD\Laika\Classes\LaikaFactory;
+use RatMD\Laika\Classes\PublicComponentBase;
 use RatMD\Laika\Twig\Extension;
 use System\Classes\PluginBase;
 use Twig\Environment;
@@ -58,6 +61,26 @@ class Plugin extends PluginBase
     {
         Event::listen('cms.extendTwig', function (Environment $twig) {
             $twig->addExtension(new Extension);
+        });
+
+        ComponentBase::extend(function($component) {
+            $component->addDynamicMethod('getPageVars', function() use ($component) {
+                $ref = new \ReflectionObject($component);
+                while ($ref) {
+                    if ($ref->hasProperty('page')) {
+                        $page = $ref->getProperty('page');
+                        $pageObj = $page->getValue($component);
+                        break;
+                    }
+                    $ref = $ref->getParentClass();
+                }
+
+                if (!isset($pageObj) || !is_object($pageObj)) {
+                    return [];
+                } else {
+                    return $pageObj->vars;
+                }
+            });
         });
     }
 }

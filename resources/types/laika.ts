@@ -31,12 +31,36 @@ export type ResolveTitle = (title: string) => string;
 
 export type ResolvedComponent = DefineComponent & { layout?: any; inheritAttrs?: boolean };
 
+export interface OctoberComponent {
+    component: string;
+    alias: string;
+    class: string;
+    props: Props;
+    vars: Props;
+}
+
+export interface OctoberComponents {
+    [alias: string]: OctoberComponent;
+}
+
+export interface OctoberTheme {
+    name: string | null;
+    description: string | null;
+    homepage: string | null;
+    author: string | null;
+    authorCode: string | null;
+    code: string | null;
+    options: Props;
+}
+
 export interface LaikaPayload<PageProps extends Props = Props, SharedProps extends Props = Props> {
     component: string;
     version: string | null;
+    theme: OctoberTheme;
     page: PageObject;
     pageProps: PageProps;
     sharedProps: SharedProps;
+    components?: OctoberComponents;
     fragments?: Record<string, string>;
     redirect?: string;
 }
@@ -86,6 +110,8 @@ export interface LaikaComposable<PageProps extends Props = Props, SharedProps ex
     page: PageObject | undefined;
     pageProps: PageProps | undefined;
     sharedProps: SharedProps | undefined;
+    theme: OctoberTheme | undefined;
+    components: OctoberComponents | undefined;
     fragments: Record<string, string> | undefined;
     redirect: string | undefined;
     runtime: LaikaRuntime<SharedProps, PageProps>;

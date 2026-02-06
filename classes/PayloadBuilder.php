@@ -2,6 +2,7 @@
 
 namespace RatMD\Laika\Classes;
 
+use Cms\Classes\ComponentBase;
 use Cms\Classes\Controller;
 use Cms\Classes\Layout;
 use Cms\Classes\Page;
@@ -113,14 +114,52 @@ class PayloadBuilder
         /** @var ?Controller */
         $ctrl = Arr::get($context, 'this.controller') ?? Arr::get($context, 'controller');
 
-        /** @var ?Page */
-        $page = Arr::get($context, 'this.page') ?? Arr::get($context, 'page');
-
         /** @var ?Layout */
         $layout = Arr::get($context, 'this.layout') ?? Arr::get($context, 'layout');
+        $layoutComponents = [];
+        if ($layout && !empty($layout->components)) {
+            foreach ($layout->components AS $key => $component) {
+                $alias = $component->alias ?: (string) $key;
+                $obj = Arr::get($context, $alias) ?? ($ctrl?->vars[$alias] ?? null) ?? $component;
+
+                /** @var ComponentBase $component */
+                $layoutComponents[$alias] = [
+                    'component' => $component->name,
+                    'alias'     => $component->alias,
+                    'class'     => get_class($component),
+                    'props'     => $component->getProperties(),
+                    'vars'      => $obj?->getPageVars(),
+                ];
+            }
+        }
+
+        /** @var ?Page */
+        $page = Arr::get($context, 'this.page') ?? Arr::get($context, 'page');
+        $pageComponents = [];
+        if ($page && !empty($page->components)) {
+            foreach ($page->components AS $key => $component) {
+                $alias = $component->alias ?: (string) $key;
+                $obj = Arr::get($context, $alias) ?? ($ctrl?->vars[$alias] ?? null) ?? $component;
+
+                /** @var ComponentBase $component */
+                $pageComponents[$alias] = [
+                    'component' => $component->name,
+                    'alias'     => $component->alias,
+                    'class'     => get_class($component),
+                    'props'     => $component->getProperties(),
+                    'vars'      => $obj?->getPageVars(),
+                ];
+            }
+        }
 
         /** @var ?Theme */
         $theme = Arr::get($context, 'this.theme') ?? Arr::get($context, 'theme');
+        $themeConfig = $theme->getConfig();
+        $themeOptions = [];
+        $optionKeys = array_keys($theme->getFormConfig()['fields']);
+        foreach ($optionKeys AS $key) {
+            $themeOptions[$key] = $thisObj['theme']->{$key} ?? null;
+        }
 
         // URL
         $url = $this->request->getRequestUri();
@@ -162,6 +201,15 @@ class PayloadBuilder
         $payload = [
             'component' => $component,
             'version'   => $version,
+            'theme'     => [
+                'name'          => $themeConfig['name'] ?? null,
+                'description'   => $themeConfig['description'] ?? null,
+                'homepage'      => $themeConfig['homepage'] ?? null,
+                'author'        => $themeConfig['author'] ?? null,
+                'authorCode'    => $themeConfig['authorCode'] ?? null,
+                'code'          => $themeConfig['code'] ?? null,
+                'options'       => $themeOptions,
+            ],
             'page'      => [
                 'id'        => $pageId,
                 'url'       => $url,
@@ -175,6 +223,7 @@ class PayloadBuilder
             ],
             'pageProps'     => $this->pageProps,
             'sharedProps'   => $this->shared->toArray(),
+            'components'    => array_merge($layoutComponents, $pageComponents),
             'fragments'     => (object) $this->fragments,
         ];
 

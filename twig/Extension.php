@@ -4,7 +4,6 @@ namespace RatMD\Laika\Twig;
 
 use Cms\Classes\Theme;
 use Illuminate\Foundation\Vite;
-use Illuminate\Support\Js;
 use October\Rain\Support\Facades\File;
 use October\Rain\Support\Facades\Yaml;
 use RatMD\Laika\Classes\PayloadBuilder;

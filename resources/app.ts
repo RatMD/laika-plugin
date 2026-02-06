@@ -183,7 +183,7 @@ export const plugin: Plugin = {
         Object.defineProperty(app.config.globalProperties, '$laika', {
             get: () => runtime
         });
-        Object.defineProperty(app.config.globalProperties, '$page', {
+        Object.defineProperty(app.config.globalProperties, '$payload', {
             get: () => payload.value
         });
     },
@@ -203,6 +203,8 @@ export function useLaika<PageProps extends Props = Props, SharedProps extends Pr
         page: computed(() => payload.value?.page),
         pageProps: computed(() => payload.value?.pageProps),
         sharedProps: computed(() => payload.value?.sharedProps),
+        theme: computed(() => payload.value?.theme),
+        components: computed(() => payload.value?.components),
         fragments: computed(() => payload.value?.fragments),
         redirect: computed(() => payload.value?.redirect),
         runtime: computed(() => runtime),
