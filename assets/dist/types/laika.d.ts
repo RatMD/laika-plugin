@@ -1,51 +1,107 @@
-import type { DefineComponent, App, Plugin } from 'vue';
-export type PageProps = Record<string, unknown>;
-export interface LaikaPageInfo {
-    url: string;
-    component: string;
-    locale?: string;
+import type { App, Component, DefineComponent, Plugin } from 'vue';
+export type Props = Record<string, unknown>;
+export interface PageHeader extends Props {
+    title: string | null;
+    meta_title: string | null;
+    meta_description: string | null;
 }
-export interface LaikaHead {
-    title?: string;
-    html?: string[];
+export interface PageObject {
+    id: string | null;
+    url: string | null;
+    file: string | null;
+    title: string | null;
+    head: PageHeader;
+    content: string | null;
+    layout: string | null;
+    theme: string | null;
+    locale: string | null;
 }
-export interface LaikaPayload<SharedProps extends PageProps = PageProps, Props extends PageProps = PageProps> {
+export type ResolveResult = DefineComponent | Promise<DefineComponent> | {
+    default: DefineComponent;
+} | Promise<{
+    default: DefineComponent;
+}>;
+export type ResolveCallback = (name: string) => ResolveResult;
+export type ResolveTitle = (title: string) => string;
+export type ResolvedComponent = DefineComponent & {
+    layout?: any;
+    inheritAttrs?: boolean;
+};
+export interface OctoberComponent {
     component: string;
-    url: string;
+    alias: string;
+    class: string;
+    props: Props;
+    vars: Props;
+}
+export interface OctoberComponents {
+    [alias: string]: OctoberComponent;
+}
+export interface OctoberTheme {
+    name: string | null;
+    description: string | null;
+    homepage: string | null;
+    author: string | null;
+    authorCode: string | null;
+    code: string | null;
+    options: Props;
+}
+export interface LaikaPayload<PageProps extends Props = Props, SharedProps extends Props = Props> {
+    component: string;
     version: string | null;
-    page?: Record<string, unknown>;
-    head?: LaikaHead;
+    theme: OctoberTheme;
+    page: PageObject;
+    pageProps: PageProps;
+    sharedProps: SharedProps;
+    components?: OctoberComponents;
     fragments?: Record<string, string>;
     redirect?: string;
-    props: {
-        shared: SharedProps;
-        page: LaikaPageInfo;
-    } & Props;
 }
-export interface LaikaPluginApi<SharedProps extends PageProps = PageProps, Props extends PageProps = PageProps> {
-    page: () => LaikaPayload<SharedProps, Props>;
+export interface LaikaAppComponentProps<PageProps extends Props = Props, SharedProps extends Props = Props> {
+    initialPayload: LaikaPayload<PageProps, SharedProps>;
+    initialComponent?: DefineComponent;
+    resolveComponent: ResolveCallback;
+    title?: ResolveTitle;
+}
+export type LaikaAppComponent<PageProps extends Props = Props, SharedProps extends Props = Props> = DefineComponent<LaikaAppComponentProps<PageProps, SharedProps>>;
+export type LaikaPlugin = Plugin;
+export interface LaikaRuntime<PageProps extends Props = Props, SharedProps extends Props = Props> {
+    payload: () => LaikaPayload<PageProps, SharedProps> | undefined;
+    page: () => LaikaPayload<PageProps, SharedProps>['page'] | undefined;
     visit: (url: string, opts?: {
         replace?: boolean;
+        preserveState?: boolean;
     }) => Promise<void>;
     request: (handler: string, data?: Record<string, unknown>) => Promise<unknown>;
+    setLayout?: (layout: any) => void;
 }
-export interface LaikaSetup<SharedProps extends PageProps, Props extends PageProps> {
+export interface LaikaSetup<PageProps extends Props = Props, SharedProps extends Props = Props> {
     root: HTMLElement;
-    App: DefineComponent;
-    props: LaikaPayload<SharedProps, Props>['props'];
-    payload: LaikaPayload<SharedProps, Props>;
-    laikaPlugin: Plugin;
-    laika: LaikaPluginApi<SharedProps, Props>;
+    App: LaikaAppComponent<PageProps, SharedProps> | Component;
+    props: LaikaAppComponentProps<PageProps, SharedProps>;
+    payload: LaikaPayload<PageProps, SharedProps>;
+    plugin: LaikaPlugin;
 }
-export interface LaikaOptions<SharedProps extends PageProps, Props extends PageProps = PageProps> {
+export interface LaikaOptions<PageProps extends Props = Props, SharedProps extends Props = Props> {
     title?: (title: string) => string;
-    resolve: (name: string) => DefineComponent | Promise<DefineComponent> | {
-        default: DefineComponent;
-    } | Promise<{
-        default: DefineComponent;
-    }>;
-    setup: (options: LaikaSetup<SharedProps, Props>) => App;
+    resolve: (name: string) => ResolveResult;
+    setup: (options: LaikaSetup<PageProps, SharedProps>) => App;
     rootId?: string;
     onError?: (err: unknown) => void;
+}
+export interface LaikaComposable<PageProps extends Props = Props, SharedProps extends Props = Props> {
+    component: DefineComponent | undefined;
+    layout: any;
+    key: number | undefined;
+    payload: LaikaPayload<SharedProps, PageProps> | undefined;
+    version: string | null | undefined;
+    page: PageObject | undefined;
+    pageProps: PageProps | undefined;
+    sharedProps: SharedProps | undefined;
+    theme: OctoberTheme | undefined;
+    components: OctoberComponents | undefined;
+    fragments: Record<string, string> | undefined;
+    redirect: string | undefined;
+    runtime: LaikaRuntime<SharedProps, PageProps>;
 }
 //# sourceMappingURL=laika.d.ts.map

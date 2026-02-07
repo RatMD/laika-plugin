@@ -78,11 +78,15 @@ class Plugin extends PluginBase
                 }
 
 
-                // @todo Multiple [component alias] components currently collide and overwrite the
-                //       pageObj properties. Temporary, but ugly & unstable workaround:
                 if (!isset($pageObj) || !is_object($pageObj)) {
                     return [];
                 } else {
+                    if ($component->alias === $component->name) {
+                        return $pageObj->vars;
+                    }
+
+                    // @todo Multiple [component alias] components currently collide and overwrite the
+                    //       pageObj properties. Temporary, but ugly & unstable workaround:
                     $vars = json_decode(json_encode($pageObj->vars), true);
                     $keys = array_keys($pageObj->vars);
 
