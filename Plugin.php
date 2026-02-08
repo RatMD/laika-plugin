@@ -64,11 +64,6 @@ class Plugin extends PluginBase
      */
     public function boot()
     {
-        Event::listen('component.beforeRun', function (){
-            dd(func_get_args());
-        });
-
-        // @todo Find a sane way to isolate component instance properties.
         ComponentBase::extend(function(ComponentBase $component) {
             $accessor = \Closure::bind(
                 function () {
