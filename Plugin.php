@@ -64,45 +64,49 @@ class Plugin extends PluginBase
      */
     public function boot()
     {
+        Event::listen('component.beforeRun', function (){
+            dd(func_get_args());
+        });
+
         // @todo Find a sane way to isolate component instance properties.
-        ComponentBase::extend(function($component) {
-            $component->addDynamicMethod('getPageVars', function() use ($component) {
-                $ref = new \ReflectionObject($component);
-                while ($ref) {
-                    if ($ref->hasProperty('page')) {
-                        $page = $ref->getProperty('page');
-                        $pageObj = $page->getValue($component);
-                        break;
+        ComponentBase::extend(function(ComponentBase $component) {
+            $accessor = \Closure::bind(
+                function () {
+                    return $this->page ?? null;
+                },
+                $component,
+                ComponentBase::class
+            );
+
+            // Add laika properties
+            $component->addDynamicProperty('__laikaSnapshot', null);
+            $component->addDynamicProperty('__laikaVars', []);
+
+            // Create Snapshot
+            $component->bindEvent('component.beforeRun', function () use ($accessor, $component) {
+                $pageObject = $accessor->call($component);
+                $component->__laikaSnapshot = $pageObject?->vars ?? [];
+            });
+
+            // Collect new Vars
+            $component->bindEvent('component.run', function () use ($accessor, $component) {
+                $pageObject = $accessor->call($component);
+
+                $before = (array) $component->__laikaSnapshot ?? [];
+                $after = (array) $pageObject?->vars ?? [];
+
+                $diff = [];
+                foreach ($after as $key => $val) {
+                    if (!array_key_exists($key, $before) || $before[$key] !== $val) {
+                        $diff[$key] = $val;
                     }
-                    $ref = $ref->getParentClass();
                 }
+                $component->__laikaVars = $diff;
+            });
 
-
-                if (!isset($pageObj) || !is_object($pageObj)) {
-                    return [];
-                } else {
-                    if ($component->alias === $component->name) {
-                        return $pageObj->vars;
-                    }
-
-                    // @todo Multiple [component alias] components currently collide and overwrite the
-                    //       pageObj properties. Temporary, but ugly & unstable workaround:
-                    $vars = json_decode(json_encode($pageObj->vars), true);
-                    $keys = array_keys($pageObj->vars);
-
-                    $ref = new \ReflectionObject($component);
-                    foreach ($keys AS $key) {
-                        if ($key === 'page') {
-                            continue;
-                        }
-                        if ($ref->hasProperty($key)) {
-                            $val = $ref->getProperty($key);
-                            $vars[$key] = $val->getValue($component);
-                        }
-                    }
-
-                    return $vars;
-                }
+            // Get component-associated page variables
+            $component->addDynamicMethod('getPageVars', function () use ($accessor, $component) {
+                return $component->__laikaVars;
             });
         });
 

@@ -105,7 +105,6 @@ export const App: LaikaAppComponent = defineComponent({
                 },
                 credentials: "same-origin",
             });
-            console.log(res, url);
 
             if (res.status === 409) {
                 const loc = res.headers.get("X-Laika-Location");
