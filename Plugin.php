@@ -4,16 +4,19 @@ namespace RatMD\Laika;
 
 use Cms\Classes\ComponentBase;
 use Cms\Classes\Controller;
+use Cms\Classes\Meta;
 use Cms\Classes\Page;
 use Cms\Classes\Theme;
 use Illuminate\Foundation\Vite;
-use Illuminate\Support\Facades\Request;
-use Illuminate\Support\Facades\Response;
 use October\Rain\Support\Facades\Event;
 use RatMD\Laika\Classes\LaikaFactory;
-use RatMD\Laika\Classes\PayloadBuilder;
+use RatMD\Laika\Components\LaikaComponent;
+use RatMD\Laika\Http\Responder;
+use RatMD\Laika\Services\Context;
+use RatMD\Laika\Services\ContextResolver;
+use RatMD\Laika\Services\Payload;
+use RatMD\Laika\Services\Shared;
 use RatMD\Laika\Twig\Extension;
-use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use System\Classes\PluginBase;
 use Twig\Environment;
 
@@ -47,9 +50,19 @@ class Plugin extends PluginBase
      */
     public function register()
     {
-        $this->app->singleton(LaikaFactory::class);
+        $this->app->bind(Context::class, function ($app) {
+            return $this->app->make(ContextResolver::class)->get();
+        });
 
+        $this->app->singleton(LaikaFactory::class);
+        $this->app->singleton(ContextResolver::class);
+        $this->app->singleton(Meta::class);
+        $this->app->singleton(Payload::class);
+        $this->app->singleton(Shared::class);
         $this->app->singleton(Vite::class, function () {
+
+            // @todo When installing a plugin wie plugin:install, october automatically creates and
+            //       uses a child theme ... So this behaviour should be reflected here too(?)
             $theme = Theme::getActiveTheme()->getDirName();
             $vite = new Vite;
             $vite->useManifestFilename(".vite/manifest.json");
@@ -57,6 +70,12 @@ class Plugin extends PluginBase
             $vite->useHotFile(themes_path("{$theme}/assets/.hot"));
             return $vite;
         });
+
+        $this->app->alias(LaikaFactory::class, 'laika');
+        $this->app->alias(Context::class, 'laika.context');
+        $this->app->alias(Meta::class, 'laika.meta');
+        $this->app->alias(Payload::class, 'laika.payload');
+        $this->app->alias(Shared::class, 'laika.shared');
     }
 
     /**
@@ -64,99 +83,100 @@ class Plugin extends PluginBase
      */
     public function boot()
     {
-        ComponentBase::extend(function(ComponentBase $component) {
-            $accessor = \Closure::bind(
-                function () {
-                    return $this->page ?? null;
-                },
-                $component,
-                ComponentBase::class
-            );
+        Laika::once(
+            'version',      // Current asset version
+            fn (Context $context) => $context->getAssetVersion()
+        );
+        Laika::once(
+            'theme',        // Theme details
+            fn (Context $context) => $context->getThemeDetails()
+        );
+        Laika::always(
+            'page',         // Current page details
+            fn (Context $context) => $context->getPageDetails()
+        );
+        Laika::always(
+            'components',   // Page + Layout components
+            fn (Context $context) => $context->getComponentsData()
+        );
+        Laika::always(
+            'shared',       // Shared properties
+            fn (Shared $shared) => $shared->toArray()
+        );
 
-            // Add laika properties
-            $component->addDynamicProperty('__laikaSnapshot', null);
-            $component->addDynamicProperty('__laikaVars', []);
+        // Extend ComponentBase
+        ComponentBase::extend(fn (ComponentBase $component) => $this->extendComponentBase($component));
 
-            // Create Snapshot
-            $component->bindEvent('component.beforeRun', function () use ($accessor, $component) {
-                $pageObject = $accessor->call($component);
-                $component->__laikaSnapshot = $pageObject?->vars ?? [];
-            });
-
-            // Collect new Vars
-            $component->bindEvent('component.run', function () use ($accessor, $component) {
-                $pageObject = $accessor->call($component);
-
-                $before = (array) $component->__laikaSnapshot ?? [];
-                $after = (array) $pageObject?->vars ?? [];
-
-                $diff = [];
-                foreach ($after as $key => $val) {
-                    if (!array_key_exists($key, $before) || $before[$key] !== $val) {
-                        $diff[$key] = $val;
-                    }
-                }
-                $component->__laikaVars = $diff;
-            });
-
-            // Get component-associated page variables
-            $component->addDynamicMethod('getPageVars', function () use ($accessor, $component) {
-                return $component->__laikaVars;
-            });
-        });
-
+        // Register custom TWIG extension
         Event::listen('cms.extendTwig', function (Environment $twig) {
             $twig->addExtension(new Extension);
         });
 
-        // @todo Add a X-Laika-Partial | X-Laika-Only solution to update just specific props,
-        //       instead of the full json payload.
-        Event::listen('cms.page.display', function (Controller $controller, string $url, Page $page, $result) {
-            if (!Request::header('X-Laika')) {
-                return null;
+        // Enhance Response
+        Event::listen(
+            'cms.page.display',
+            function (Controller $controller, string $url, Page $page, $result) {
+                /** @var Responder $responder */
+                $responder = app(Responder::class);
+                return $responder->respond($controller, $page, $url, $result);
             }
-            if ($result instanceof SymfonyResponse) {
-                return $this->transformSymfonyResponse($result);
-            }
-
-            $request = $controller->getAjaxRequest();
-            if ($request->hasAjaxHandler()) {
-                return null;
-            }
-
-            // Fetch Page Content
-            $oldLayout = $page->layout;
-            $page->layout = null;
-            $pageContent = $controller->renderPage();
-            $page->layout = $oldLayout;
-
-            // Laika Response
-            $builder = PayloadBuilder::fromController($controller, $page);
-            $builder->setPageContent($pageContent);
-            $payload = $builder->toArray();
-            return Response::json($payload, 200, [
-                'Vary'      => 'X-Laika',
-                'X-Laika'   => '1',
-            ]);
-        });
+        );
     }
 
     /**
      *
-     * @param SymfonyResponse $response
-     * @return SymfonyResponse
+     * @param ComponentBase $component
+     * @return void
      */
-    protected function transformSymfonyResponse(SymfonyResponse $response): SymfonyResponse
+    private function extendComponentBase(ComponentBase $component)
     {
-        if ($response->isRedirection()) {
-            $location = $response->headers->get('Location');
+        $accessor = \Closure::bind(
+            function () {
+                return $this->page ?? null;
+            },
+            $component,
+            ComponentBase::class
+        );
 
-            return response('', 409, [
-                'X-Laika-Location' => $location,
-                'X-Laika' => '1',
-            ]);
-        }
+        // Add laika properties
+        $component->addDynamicProperty('__laikaSnapshot', null);
+        $component->addDynamicProperty('__laikaProps', []);
 
-        return $response;
+        // Create Snapshot
+        $component->bindEvent('component.beforeRun', function () use ($accessor, $component) {
+            $pageObject = $accessor->call($component);
+            $component->__laikaSnapshot = $pageObject?->vars ?? [];
+        });
+
+        // Collect new Vars
+        $component->bindEvent('component.run', function () use ($accessor, $component) {
+            $pageObject = $accessor->call($component);
+
+            $before = (array) $component->__laikaSnapshot ?? [];
+            $after = (array) $pageObject?->vars ?? [];
+
+            $diff = [];
+            foreach ($after as $key => $val) {
+                if (!array_key_exists($key, $before) || $before[$key] !== $val) {
+                    $diff[$key] = $val;
+                }
+            }
+            $component->__laikaProps = $diff;
+        });
+
+        // Get component-associated page variables
+        $component->addDynamicMethod('getPageVars', function () use ($accessor, $component) {
+            return $component->__laikaProps;
+        });
+    }
+
+    /**
+     * registerComponents
+     */
+    public function registerComponents()
+    {
+        return [
+            LaikaComponent::class => 'laika'
+        ];
     }
 }

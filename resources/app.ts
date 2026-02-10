@@ -22,7 +22,7 @@ import {
     Fragment,
 } from "vue";
 import { ProgressBar } from "./components";
-import { unwrapModule } from "./utils";
+import { getByPath, parseOnlyHeader, setByPath, unwrapModule } from "./utils";
 import { useProgressBar } from "./progress";
 
 
@@ -86,7 +86,7 @@ export const App: LaikaAppComponent = defineComponent({
         component.value = initialComponent ? markRaw(unwrapModule<ResolvedComponent>(initialComponent)) : void 0;
         if (!component.value) {
             Promise
-                .resolve(resolveComponent(initialPayload.component))
+                .resolve(resolveComponent(initialPayload.page.component))
                 .then(mod => { component.value = markRaw(unwrapModule<ResolvedComponent>(mod)) })
                 .catch(console.error);
         }
@@ -119,7 +119,42 @@ export const App: LaikaAppComponent = defineComponent({
                 throw new Error("Navigation fallback");
             }
 
-            return (await res.json()) as LaikaPayload;
+            const only = parseOnlyHeader(res.headers.get("X-Laika-Only"));
+            const data = (await res.json()) as LaikaPayload;
+
+            return { data, only };
+        }
+
+        /**
+         *
+         * @param current
+         * @param next
+         * @param only
+         * @returns
+         */
+        function patchPayload(current: LaikaPayload, next: LaikaPayload, only: string[]): LaikaPayload {
+            const out: any = { ...(current as any) };
+            const top = new Set(only.filter(k => !k.startsWith('shared.')));
+
+            for (const key of top) {
+                if (key in (next as any)) {
+                    out[key] = (next as any)[key];
+                }
+            }
+
+            const sharedPaths = only.filter(k => k.startsWith('shared.'));
+            if (sharedPaths.length) {
+                out.shared = { ...(out.shared ?? {}) };
+
+                for (const path of sharedPaths) {
+                    const val = getByPath(next as any, path);
+                    if (val !== undefined) {
+                        setByPath(out as any, path, val);
+                    }
+                }
+            }
+
+            return out as LaikaPayload;
         }
 
         /**
@@ -127,12 +162,17 @@ export const App: LaikaAppComponent = defineComponent({
          * @param nextPayload
          * @param preserveState
          */
-        async function swap(nextPayload: LaikaPayload, preserveState?: boolean) {
-            const mod = await resolveComponent(nextPayload.component);
+        async function swap(nextPayload: LaikaPayload, preserveState?: boolean, only?: string[]) {
+            const mod = await resolveComponent(nextPayload.page.component);
             component.value = markRaw(unwrapModule<ResolvedComponent>(mod));
-            payload.value = nextPayload;
 
-            const title = nextPayload.page.head?.title;
+            if (only && only.length && payload.value) {
+                payload.value = patchPayload(payload.value, nextPayload, only);
+            } else {
+                payload.value = nextPayload;
+            }
+
+            const title = payload.value?.page?.title;
             if (title) {
                 document.title = (titleCallback ?? ((x) => x))(title);
             }
@@ -153,8 +193,8 @@ export const App: LaikaAppComponent = defineComponent({
                     history.pushState({}, "", url);
                 }
 
-                const nextPayload = await fetchPayload(url);
-                await swap(nextPayload, opts?.preserveState);
+                const { data: nextPayload, only } = await fetchPayload(url);
+                await swap(nextPayload, opts?.preserveState, only);
                 progress.done();
             } catch (err) {
                 console.error(err);
@@ -175,7 +215,7 @@ export const App: LaikaAppComponent = defineComponent({
                 return null;
             }
 
-            const props = payload.value.pageProps ?? {};
+            const props = payload.value.page.props ?? {};
             const child = h(component.value, { ...(props as any), key: key.value });
 
             // Handle Component Layout
@@ -235,12 +275,9 @@ export function useLaika<PageProps extends Props = Props, SharedProps extends Pr
         payload: computed(() => payload.value),
         version: computed(() => payload.value?.version),
         page: computed(() => payload.value?.page),
-        pageProps: computed(() => payload.value?.pageProps),
-        sharedProps: computed(() => payload.value?.sharedProps),
+        shared: computed(() => payload.value?.shared),
         theme: computed(() => payload.value?.theme),
         components: computed(() => payload.value?.components),
-        fragments: computed(() => payload.value?.fragments),
-        redirect: computed(() => payload.value?.redirect),
         runtime: computed(() => runtime),
     }) as LaikaComposable<PageProps, SharedProps>;
 }

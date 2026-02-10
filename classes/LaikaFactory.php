@@ -2,57 +2,82 @@
 
 namespace RatMD\Laika\Classes;
 
-use Illuminate\Contracts\Support\Arrayable;
-use RatMD\Laika\Support\Shared;
+use RatMD\Laika\Services\Payload;
 
 class LaikaFactory
 {
     /**
      *
-     * @param Shared $shared
+     * @param Payload $payload
      * @return void
      */
     public function __construct(
-        protected readonly Shared $shared
+        protected readonly Payload $payload
     ) { }
+
+    /**
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return Payload
+     */
+    public function once(string $key, mixed $value): Payload
+    {
+        return $this->payload->once($key, $value);
+    }
+
+    /**
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return Payload
+     */
+    public function always(string $key, mixed $value): Payload
+    {
+        return $this->payload->always($key, $value);
+    }
+
+    /**
+     *
+     * @param callable $condition
+     * @param string $key
+     * @param mixed $value
+     * @return Payload
+     */
+    public function when(callable $condition, string $key, mixed $value): Payload
+    {
+        return $this->payload->when($condition, $key, $value);
+    }
+
+    /**
+     *
+     * @param callable $condition
+     * @param string $key
+     * @param mixed $value
+     * @return Payload
+     */
+    public function unless(callable $condition, string $key, mixed $value): Payload
+    {
+        return $this->payload->unless($condition, $key, $value);
+    }
 
     /**
      *
      * @param string|array $key
      * @param mixed|null $value
-     * @return void
+     * @return Payload
      */
-    public function share(string|array $key, mixed $value = null)
+    public function share(string|array $key, mixed $value = null): Payload
     {
-        if (is_array($key)) {
-            $this->shared->merge($key);
-        } else if ($key instanceof Arrayable) {
-            $this->shared->merge($key->toArray());
-        } else {
-            $this->shared->set($key, $value);
-        }
-    }
-
-    /**
-     *
-     * @return Shared
-     */
-    public function getShared(?string $key = null, mixed $default = null): mixed
-    {
-        if (empty($key)) {
-            return $this->shared;
-        } else {
-            return $this->shared->get($key, $default);
-        }
+        return $this->payload->share($key, $value);
     }
 
     /**
      *
      * @return void
      */
-    public function flushShared(): void
+    public function flush(): void
     {
-        $this->shared->flush();
+        $this->payload->flush();
     }
-
 }

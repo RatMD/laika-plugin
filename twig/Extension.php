@@ -3,7 +3,10 @@
 namespace RatMD\Laika\Twig;
 
 use Illuminate\Foundation\Vite;
-use RatMD\Laika\Classes\PayloadBuilder;
+use Illuminate\Support\Js;
+use RatMD\Laika\Services\Context;
+use RatMD\Laika\Services\ContextResolver;
+use RatMD\Laika\Services\Payload;
 use Twig\Extension\AbstractExtension;
 use Twig\Markup;
 
@@ -29,8 +32,15 @@ class Extension extends AbstractExtension
      */
     public function laikaHeadFunction(array $context = [])
     {
-        $builder = PayloadBuilder::fromTwigContext($context);
-        return new Markup($builder->toScriptTag(), 'UTF-8');
+        $resolver = app(ContextResolver::class);
+        $resolver->set(Context::createFromTwigContext($context));
+
+        $payload = app(Payload::class);
+        $script  = '<script type="application/json" data-laika="payload">';
+        $script .= Js::encode($payload->toArray());
+        $script .= '</script>';
+
+        return new Markup($script, 'UTF-8');
     }
 
     /**

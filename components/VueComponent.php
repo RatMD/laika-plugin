@@ -5,6 +5,9 @@ namespace RatMD\Laika\Contracts;
 use Cms\Classes\ComponentBase;
 use RatMD\Laika\Laika;
 
+/**
+ * Work in Progress
+ */
 abstract class VueComponent extends ComponentBase
 {
     /**

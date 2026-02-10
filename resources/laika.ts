@@ -32,7 +32,7 @@ export async function createLaikaApp<PageProps extends Props = Props, SharedProp
     }
 
     const payload = readInitialPayload<PageProps, SharedProps>();
-    const resolved = await Promise.resolve(options.resolve(payload.component));
+    const resolved = await Promise.resolve(options.resolve(payload.page.component));
     const initialComponent = unwrapModule<DefineComponent>(resolved);
 
     // Create App Properties
