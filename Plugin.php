@@ -2,6 +2,7 @@
 
 namespace RatMD\Laika;
 
+use Backend\Classes\Controller as BackendController;
 use Cms\Classes\ComponentBase;
 use Cms\Classes\Controller;
 use Cms\Classes\Meta;
@@ -9,6 +10,7 @@ use Cms\Classes\Page;
 use Cms\Classes\Theme;
 use Illuminate\Foundation\Vite;
 use October\Rain\Support\Facades\Event;
+use RatMD\Laika\Classes\EditorExtension;
 use RatMD\Laika\Classes\LaikaFactory;
 use RatMD\Laika\Components\LaikaComponent;
 use RatMD\Laika\Http\Responder;
@@ -39,7 +41,7 @@ class Plugin extends PluginBase
     {
         return [
             'name'          => 'Laika',
-            'description'   => 'LAIKA is an Inertia-inspired Vue/Vite adapter which lets you build your entire OctoberCMS theme in Vue while still using everything October provides.',
+            'description'   => 'ratmd.laika::lang.plugin.description',
             'author'        => 'rat.md',
             'icon'          => 'icon-paw'
         ];
@@ -121,6 +123,18 @@ class Plugin extends PluginBase
                 return $responder->respond($controller, $page, $url, $result);
             }
         );
+
+        // Register Editor Extension
+        Event::listen('editor.extension.register', function () {
+            return EditorExtension::class;
+        });
+
+        // Inject Custom CSS
+        Event::listen('backend.page.beforeDisplay', function (BackendController $controller, string $action, array $params) {
+            if (is_a($controller , \Editor\Controllers\Index::class)) {
+                $controller->addCss('/plugins/ratmd/laika/assets/css/laika.editor.icons.css');
+            }
+        });
     }
 
     /**

@@ -39,6 +39,15 @@ class TokenNode extends Node
             }
         }
 
-        $compiler->write("yield \$this->env->getExtension(\RatMD\Laika\Twig\Extension::class)->{$this->tag}Function(\$context);\n");
+        $compiler->write("yield \$this->env->getExtension(\RatMD\Laika\Twig\Extension::class)->{$tagName}Function(\$context);\n");
+
+        if ($tagName === 'laikaHead') {
+            $compiler->write("yield \$this->env->getExtension(\Cms\Twig\Extension::class)->assetsFunction('css');\n");
+            $compiler->write("yield \$this->env->getExtension(\Cms\Twig\Extension::class)->displayBlock('styles');\n");
+        }
+        if ($tagName === 'laika') {
+            $compiler->write("yield \$this->env->getExtension(\Cms\Twig\Extension::class)->assetsFunction('js');\n");
+            $compiler->write("yield \$this->env->getExtension(\Cms\Twig\Extension::class)->displayBlock('scripts');\n");
+        }
     }
 }

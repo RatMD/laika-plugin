@@ -1,3 +1,5 @@
+import "./larajax";
+
 import type { DefineComponent } from "vue";
 import type { LaikaAppComponentProps, LaikaOptions, LaikaPayload, Props } from "./types";
 import { unwrapModule } from "./utils";

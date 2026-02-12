@@ -1,21 +1,4 @@
 import type { App, Component, DefineComponent, Plugin } from 'vue';
-export type Props = Record<string, unknown>;
-export interface PageHeader extends Props {
-    title: string | null;
-    meta_title: string | null;
-    meta_description: string | null;
-}
-export interface PageObject {
-    id: string | null;
-    url: string | null;
-    file: string | null;
-    title: string | null;
-    head: PageHeader;
-    content: string | null;
-    layout: string | null;
-    theme: string | null;
-    locale: string | null;
-}
 export type ResolveResult = DefineComponent | Promise<DefineComponent> | {
     default: DefineComponent;
 } | Promise<{
@@ -27,47 +10,61 @@ export type ResolvedComponent = DefineComponent & {
     layout?: any;
     inheritAttrs?: boolean;
 };
-export interface OctoberComponent {
-    component: string;
-    alias: string;
-    class: string;
-    props: Props;
-    vars: Props;
-}
-export interface OctoberComponents {
-    [alias: string]: OctoberComponent;
-}
-export interface OctoberTheme {
+export type Props = Record<string, unknown>;
+export interface ThemeObject<ThemeOptions extends Props = Props> {
     name: string | null;
     description: string | null;
     homepage: string | null;
     author: string | null;
     authorCode: string | null;
     code: string | null;
-    options: Props;
+    options: ThemeOptions;
 }
-export interface LaikaPayload<PageProps extends Props = Props, SharedProps extends Props = Props> {
+export interface PageMetaObject extends Props {
+    title: string | null;
+    meta_title: string | null;
+    meta_description: string | null;
+}
+export interface PageObject<PageProps extends Props = Props> {
+    id: string | null;
+    url: string | null;
+    file: string | null;
     component: string;
-    version: string | null;
-    theme: OctoberTheme;
-    page: PageObject;
-    pageProps: PageProps;
-    sharedProps: SharedProps;
-    components?: OctoberComponents;
-    fragments?: Record<string, string>;
-    redirect?: string;
+    props: PageProps;
+    layout: string;
+    theme: string | number;
+    title: string;
+    meta: PageMetaObject;
+    content: string | null;
 }
-export interface LaikaAppComponentProps<PageProps extends Props = Props, SharedProps extends Props = Props> {
-    initialPayload: LaikaPayload<PageProps, SharedProps>;
+export interface OctoberComponent {
+    component: string;
+    alias: string;
+    class: string;
+    options: Props;
+    props: Props;
+}
+export interface OctoberComponents {
+    [alias: string]: OctoberComponent;
+}
+export interface LaikaPayload<PageProps extends Props = Props, SharedProps extends Props = Props, ThemeOptions extends Props = Props> {
+    version: string | null;
+    theme: ThemeObject<ThemeOptions>;
+    page: PageObject<PageProps>;
+    components: OctoberComponents;
+    shared: SharedProps;
+}
+export interface LaikaAppComponentProps<PageProps extends Props = Props, SharedProps extends Props = Props, ThemeOptions extends Props = Props> {
+    initialPayload: LaikaPayload<PageProps, SharedProps, ThemeOptions>;
     initialComponent?: DefineComponent;
     resolveComponent: ResolveCallback;
     title?: ResolveTitle;
 }
-export type LaikaAppComponent<PageProps extends Props = Props, SharedProps extends Props = Props> = DefineComponent<LaikaAppComponentProps<PageProps, SharedProps>>;
+export type LaikaAppComponent<PageProps extends Props = Props, SharedProps extends Props = Props, ThemeOptions extends Props = Props> = DefineComponent<LaikaAppComponentProps<PageProps, SharedProps, ThemeOptions>>;
 export type LaikaPlugin = Plugin;
-export interface LaikaRuntime<PageProps extends Props = Props, SharedProps extends Props = Props> {
-    payload: () => LaikaPayload<PageProps, SharedProps> | undefined;
-    page: () => LaikaPayload<PageProps, SharedProps>['page'] | undefined;
+export interface LaikaRuntime<PageProps extends Props = Props, SharedProps extends Props = Props, ThemeOptions extends Props = Props> {
+    payload: () => LaikaPayload<PageProps, SharedProps, ThemeOptions> | undefined;
+    page: () => LaikaPayload<PageProps, SharedProps, ThemeOptions>['page'] | undefined;
     visit: (url: string, opts?: {
         replace?: boolean;
         preserveState?: boolean;
@@ -75,33 +72,30 @@ export interface LaikaRuntime<PageProps extends Props = Props, SharedProps exten
     request: (handler: string, data?: Record<string, unknown>) => Promise<unknown>;
     setLayout?: (layout: any) => void;
 }
-export interface LaikaSetup<PageProps extends Props = Props, SharedProps extends Props = Props> {
+export interface LaikaSetup<PageProps extends Props = Props, SharedProps extends Props = Props, ThemeOptions extends Props = Props> {
     root: HTMLElement;
-    App: LaikaAppComponent<PageProps, SharedProps> | Component;
-    props: LaikaAppComponentProps<PageProps, SharedProps>;
-    payload: LaikaPayload<PageProps, SharedProps>;
+    App: LaikaAppComponent<PageProps, SharedProps, ThemeOptions> | Component;
+    props: LaikaAppComponentProps<PageProps, SharedProps, ThemeOptions>;
+    payload: LaikaPayload<PageProps, SharedProps, ThemeOptions>;
     plugin: LaikaPlugin;
 }
-export interface LaikaOptions<PageProps extends Props = Props, SharedProps extends Props = Props> {
+export interface LaikaOptions<PageProps extends Props = Props, SharedProps extends Props = Props, ThemeOptions extends Props = Props> {
     title?: (title: string) => string;
     resolve: (name: string) => ResolveResult;
-    setup: (options: LaikaSetup<PageProps, SharedProps>) => App;
+    setup: (options: LaikaSetup<PageProps, SharedProps, ThemeOptions>) => App;
     rootId?: string;
     onError?: (err: unknown) => void;
 }
-export interface LaikaComposable<PageProps extends Props = Props, SharedProps extends Props = Props> {
+export interface LaikaComposable<PageProps extends Props = Props, SharedProps extends Props = Props, ThemeOptions extends Props = Props> {
     component: DefineComponent | undefined;
     layout: any;
     key: number | undefined;
-    payload: LaikaPayload<SharedProps, PageProps> | undefined;
+    payload: LaikaPayload<PageProps, SharedProps, ThemeOptions> | undefined;
     version: string | null | undefined;
-    page: PageObject | undefined;
-    pageProps: PageProps | undefined;
-    sharedProps: SharedProps | undefined;
-    theme: OctoberTheme | undefined;
+    page: PageObject<PageProps> | undefined;
+    shared: SharedProps | undefined;
+    theme: ThemeObject<ThemeOptions>;
     components: OctoberComponents | undefined;
-    fragments: Record<string, string> | undefined;
-    redirect: string | undefined;
-    runtime: LaikaRuntime<SharedProps, PageProps>;
+    runtime: LaikaRuntime<PageProps, SharedProps, ThemeOptions>;
 }
 //# sourceMappingURL=laika.d.ts.map

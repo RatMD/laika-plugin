@@ -48,6 +48,7 @@ class Responder
         // Handle specific AJAX requests
         $request = $controller->getAjaxRequest();
         if ($request->hasAjaxHandler()) {
+            dd($request);
             return null; // @todo WiP
         }
 
