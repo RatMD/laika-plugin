@@ -2,12 +2,12 @@
 
 namespace RatMD\Laika\Objects;
 
-use Cms\Classes\CmsCompoundObject;
+use RatMD\Laika\Classes\VueCompoundObject;
 
 /**
  * @todo
  */
-class Resource extends CmsCompoundObject
+class Resource extends VueCompoundObject
 {
     /**
      * The container name associated with the model.

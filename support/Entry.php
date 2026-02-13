@@ -3,8 +3,10 @@
 namespace RatMD\Laika\Support;
 
 use Illuminate\Contracts\Support\Arrayable;
+use October\Rain\Support\Arr;
 use RatMD\Laika\Classes\Context;
 use RatMD\Laika\Constants\PayloadMode;
+use RatMD\Laika\Contracts\PartialArrayable;
 
 class Entry
 {
@@ -47,17 +49,20 @@ class Entry
 
     /**
      * Normalize a resolved value for JSON serialization.
+     * @param array $only
      * @return mixed
      */
-    public function resolve(): mixed
+    public function resolve(?array $only = null): mixed
     {
         $value = $this->resolver;
 
         if (is_callable($this->resolver)) {
-            $value = app()->call($this->resolver);
+            $value = app()->call($this->resolver, [
+                'only' => $only,
+            ]);
         }
 
-        return $this->normalize($value);
+        return $this->normalize($value, $only);
     }
 
     /**
@@ -65,12 +70,38 @@ class Entry
      * @param mixed $value
      * @return mixed
      */
-    private function normalize(mixed $value): mixed
+    private function normalize(mixed $value, ?array $only = null): mixed
     {
-        if ($value instanceof Arrayable) {
-            return $value->toArray();
-        } else {
-            return $value;
+        if ($value instanceof PartialArrayable) {
+            return $value->toArray($only);
         }
+
+        if ($value instanceof Arrayable) {
+            $arr = $value->toArray();
+            return $only ? $this->projectArray($arr, $only) : $arr;
+        }
+
+        if (is_array($value)) {
+            return $only ? $this->projectArray($value, $only) : $value;
+        }
+
+        return $value;
+    }
+
+    /**
+     *
+     * @param array $data
+     * @param string[] $paths
+     */
+    protected function projectArray(array $data, array $paths): array
+    {
+        $out = [];
+        foreach ($paths as $p) {
+            $val = Arr::get($data, $p, null);
+            if (Arr::has($data, $p)) {
+                Arr::set($out, $p, $val);
+            }
+        }
+        return $out;
     }
 }

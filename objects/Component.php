@@ -2,14 +2,12 @@
 
 namespace RatMD\Laika\Objects;
 
-use Cms\Classes\CmsCompoundObject;
 use Cms\Traits\ParsableAttributes;
-use RatMD\Laika\Concerns\VueSingleFileComponent;
+use RatMD\Laika\Classes\VueCompoundObject;
 
-class Component extends CmsCompoundObject
+class Component extends VueCompoundObject
 {
     use ParsableAttributes;
-    use VueSingleFileComponent;
 
     /**
      * The container name associated with the model.
@@ -87,14 +85,5 @@ class Component extends CmsCompoundObject
      */
     public function beforeValidate()
     {
-    }
-
-    /**
-     *
-     * @return bool
-     */
-    protected function isVue(): bool
-    {
-        return str_ends_with((string) $this->fileName, '.vue');
     }
 }

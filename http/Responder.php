@@ -25,6 +25,23 @@ class Responder
 
     /**
      *
+     * @return string
+     */
+    static public function createToken()
+    {
+        $expires = time() + 15 * 60;
+        $nonce = bin2hex(random_bytes(16));
+        $secret = config('app.key');
+
+        return csrf_token() . '|' . base64_encode(json_encode([
+            'exp'   => $expires,
+            'nonce' => $nonce,
+            'sig'   => hash_hmac('sha256', $expires . ':' . $nonce, $secret),
+        ]));
+    }
+
+    /**
+     *
      * @param Controller $controller
      * @param Page $page
      * @param string $url
@@ -43,24 +60,19 @@ class Responder
 
         // Set Context
         $resolver = app(ContextResolver::class);
-        $resolver->set(Context::createFromController($controller));
+        if (!$resolver->has()) {
+            $resolver->set(Context::createFromController($controller, $page));
+        }
 
         // Handle specific AJAX requests
         $request = $controller->getAjaxRequest();
         if ($request->hasAjaxHandler()) {
-            dd($request);
             return null; // @todo WiP
         }
 
         // Laika Response
         $payload = $this->payload->toArray();
-
         $only = array_keys($payload);
-        if (isset($payload['shared']) && is_array($payload['shared'])) {
-            $sharedKeys = $this->flattenDotKeys($payload['shared'], 'shared');
-            $only = array_values(array_unique(array_merge($only, $sharedKeys)));
-        }
-
         return response()->json($payload, 200, [
             'Vary'          => 'X-Laika',
             'X-Laika'       => '1',

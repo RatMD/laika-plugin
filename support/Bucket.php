@@ -5,8 +5,9 @@ namespace RatMD\Laika\Support;
 use October\Rain\Support\Arr;
 use RatMD\Laika\Constants\PayloadMode;
 use RatMD\Laika\Contracts\Bucketable;
+use RatMD\Laika\Contracts\PartialArrayable;
 
-class Bucket implements Bucketable
+class Bucket implements Bucketable, PartialArrayable
 {
     /**
      * Stored entries keyed by dot-path.
@@ -17,18 +18,50 @@ class Bucket implements Bucketable
     /**
      * @inheritdoc
      */
-    public function toArray(): array
+    public function toArray(?array $only = null): array
     {
         $result = [];
 
         foreach ($this->entries as $key => $entry) {
+            if ($only && !$this->pathRequested($key, $only)) {
+                continue;
+            }
+
             if (!$entry->include()) {
                 continue;
             }
+
             Arr::set($result, $key, $entry->resolve());
         }
 
         return $result;
+    }
+
+    /**
+     *
+     * @param string $key
+     * @param string[] $only
+     * @return bool
+     */
+    protected function pathRequested(string $key, array $only): bool
+    {
+        foreach ($only as $p) {
+            $p = trim($p);
+            if ($p === '') {
+                continue;
+            }
+
+            if ($key === $p) {
+                return true;
+            }
+            if (str_starts_with($key, $p . '.')) {
+                return true;
+            }
+            if (str_starts_with($p, $key . '.')) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

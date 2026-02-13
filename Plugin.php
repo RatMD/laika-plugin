@@ -2,22 +2,30 @@
 
 namespace RatMD\Laika;
 
+use Ini;
 use Backend\Classes\Controller as BackendController;
+use Cms\Classes\CmsCompoundObject;
+use Cms\Classes\CmsController;
 use Cms\Classes\ComponentBase;
 use Cms\Classes\Controller;
+use Cms\Classes\Layout as CmsLayout;
 use Cms\Classes\Meta;
-use Cms\Classes\Page;
+use Cms\Classes\Page as CmsPage;
 use Cms\Classes\Theme;
 use Illuminate\Foundation\Vite;
 use October\Rain\Support\Facades\Event;
 use RatMD\Laika\Classes\EditorExtension;
 use RatMD\Laika\Classes\LaikaFactory;
 use RatMD\Laika\Components\LaikaComponent;
+use RatMD\Laika\Http\Middleware\LaikaTokenMiddleware;
 use RatMD\Laika\Http\Responder;
+use RatMD\Laika\Objects\VueLayout;
 use RatMD\Laika\Services\Context;
 use RatMD\Laika\Services\ContextResolver;
 use RatMD\Laika\Services\Payload;
 use RatMD\Laika\Services\Shared;
+use RatMD\Laika\Support\Indent;
+use RatMD\Laika\Support\SFC;
 use RatMD\Laika\Twig\Extension;
 use System\Classes\PluginBase;
 use Twig\Environment;
@@ -90,6 +98,10 @@ class Plugin extends PluginBase
             fn (Context $context) => $context->getAssetVersion()
         );
         Laika::once(
+            'token',        // Laika Request Token
+            fn (Context $context) => Responder::createToken()
+        );
+        Laika::once(
             'theme',        // Theme details
             fn (Context $context) => $context->getThemeDetails()
         );
@@ -99,25 +111,51 @@ class Plugin extends PluginBase
         );
         Laika::always(
             'components',   // Page + Layout components
-            fn (Context $context) => $context->getComponentsData()
+            fn (Context $context, ?array $only) => $context->getComponentsData($only)
+        );
+        Laika::always(
+            'october',      // October settings
+            fn (Context $context) => $context->getOctoberDetails()
         );
         Laika::always(
             'shared',       // Shared properties
-            fn (Shared $shared) => $shared->toArray()
+            fn (Shared $shared, ?array $only) => $shared->toArray($only)
         );
 
-        // Extend ComponentBase
+        // Register Laika Middleware
+        CmsController::extend(function($controller) {
+            $controller->middleware(LaikaTokenMiddleware::class);
+        });
+
+        // Extend Core Classes
         ComponentBase::extend(fn (ComponentBase $component) => $this->extendComponentBase($component));
+        CmsPage::extend(fn (CmsPage $page) => $this->extendCmsCompoundObjects($page));
+        CmsLayout::extend(fn (CmsLayout $layout) => $this->extendCmsCompoundObjects($layout));
 
         // Register custom TWIG extension
         Event::listen('cms.extendTwig', function (Environment $twig) {
             $twig->addExtension(new Extension);
         });
 
-        // Enhance Response
+        // Handle Render
+        Event::listen(
+            'cms.page.init',
+            function (Controller $controller, string $url, ?CmsPage $page = null) {
+                \Closure::bind(
+                    function () {
+                        /** @var mixed $this */
+                        if (str_ends_with($this->page->fileName, '.vue')) {
+                            $this->layout = VueLayout::createDefaultLayout();
+                        }
+                    },
+                    $controller,
+                    Controller::class
+                )->call($controller);
+            }
+        );
         Event::listen(
             'cms.page.display',
-            function (Controller $controller, string $url, Page $page, $result) {
+            function (Controller $controller, string $url, CmsPage $page, $result) {
                 /** @var Responder $responder */
                 $responder = app(Responder::class);
                 return $responder->respond($controller, $page, $url, $result);
@@ -146,6 +184,7 @@ class Plugin extends PluginBase
     {
         $accessor = \Closure::bind(
             function () {
+                /** @var ComponentBase $this */
                 return $this->page ?? null;
             },
             $component,
@@ -181,6 +220,119 @@ class Plugin extends PluginBase
         // Get component-associated page variables
         $component->addDynamicMethod('getPageVars', function () use ($accessor, $component) {
             return $component->__laikaProps;
+        });
+    }
+
+    /**
+     *
+     * @param CmsCompoundObject $model
+     * @return void
+     */
+    private function extendCmsCompoundObjects(CmsCompoundObject $model)
+    {
+        $setVueExtension = \Closure::bind(
+            function () {
+                /** @var CmsCompoundObject $this */
+                $this->defaultExtension = 'vue';
+            },
+            $model,
+            CmsCompoundObject::class
+        );
+
+        \Closure::bind(
+            function () {
+                /** @var CmsCompoundObject $this */
+                if (!in_array('vue', $this->allowedExtensions)) {
+                    $this->allowedExtensions[] = 'vue';
+                }
+            },
+            $model,
+            CmsCompoundObject::class
+        )->call($model);
+
+        // Extend Vue functionality
+        $model->addDynamicMethod('isVue', function () use ($model) {
+            if (empty($model->attributes['fileName'])) {
+                throw new \Exception('tgh');
+            }
+            return str_ends_with($model->attributes['fileName'], '.vue');
+        });
+
+        // @todo Temporary Solution
+        $model->addDynamicMethod('hydrateContent', function () use ($model) {
+            $src = (string) ($model->attributes['content'] ?? '');
+
+            [$octoberIni, $withoutOctober] = SFC::extractTag($src, 'october');
+
+            $settings = [];
+            if ($octoberIni !== null && trim($octoberIni) !== '') {
+                $settings = Ini::parse($octoberIni);
+            }
+
+            $template = SFC::extractFirstTag($withoutOctober, 'template') ?? '';
+            $script = SFC::extractFirstScriptSetup($withoutOctober) ?? '';
+            $styles = SFC::extractAllTags($withoutOctober, 'style');
+
+            $model->attributes['_indent_template'] = Indent::detect($template);
+            $model->attributes['_indent_script'] = Indent::detect($script);
+            $model->attributes['_indent_style'] = Indent::detect(implode("\n\n", $styles));
+
+            $model->attributes['_october'] = $settings;
+            $model->attributes['markup'] = Indent::strip($template, $model->attributes['_indent_template']);
+            $model->attributes['setup'] = Indent::strip($script, $model->attributes['_indent_script']);
+            $model->attributes['style'] = Indent::strip(implode("\n\n", array_map('trim', $styles)), $model->attributes['_indent_style']);
+        });
+
+        // @todo Temporary Solution
+        $model->addDynamicMethod('compileContent', function () use ($model) {
+            $settings = $model->attributes['_october'] ?? [];
+            $markup = Indent::apply(($model->attributes['markup'] ?? ''), ($model->attributes['_indent_template'] ?? '    '));
+            $setup = Indent::apply(($model->attributes['setup'] ?? ''), ($model->attributes['_indent_script'] ?? ''));
+            $style = Indent::apply(($model->attributes['style'] ?? ''), ($model->attributes['_indent_style'] ?? ''));
+
+            $parts = [];
+
+            if (is_array($settings) && !empty($settings)) {
+                $ini = Ini::render($settings);
+                $parts[] = "<october>\n" . rtrim($ini) . "\n</october>";
+            }
+
+            if (trim($markup) !== '') {
+                $parts[] = "<template>\n" . rtrim($markup) . "\n</template>";
+            } else {
+                $parts[] = "<template>\n</template>";
+            }
+
+            if (trim($setup) !== '') {
+                $parts[] = "<script lang=\"ts\" setup>\n" . rtrim($setup) . "\n</script>";
+            } else {
+                $parts[] = "<script lang=\"ts\" setup>\n</script>";
+            }
+
+            if (trim($style) !== '') {
+                $parts[] = "<style>\n" . rtrim($style) . "\n</style>";
+            }
+
+            $model->attributes['content'] = implode("\n\n", $parts) . "\n";
+        });
+
+        // Load settings
+        $model->bindEvent('model.afterFetch', function () use ($model, $setVueExtension) {
+            if (!$model->methodExists('isVue') || !$model->isVue()) {
+                return;
+            }
+            $setVueExtension->call($model);
+            $model->hydrateContent();
+
+            $ini = $model->getAttribute('_october') ?? [];
+            if (is_array($ini)) {
+                foreach ($ini as $key => $value) {
+                    if ($key === 'settings') {
+                        continue;
+                    }
+                    $model->setAttribute($key, $value);
+                }
+            }
         });
     }
 

@@ -32,28 +32,91 @@ class Payload implements Arrayable
     {
         $isPartial = Request::header('X-Laika', '0') === '1';
         $forceFull = Request::header('X-Laika-Force', '0') === '1';
-        $require = (string) Request::header('X-Laika-Require', '');
-        $requireKeys = empty(trim($require)) ? [] : array_values(
-            array_filter(array_map('trim', explode(',', $require)))
+
+        $requireHeader = (string) Request::header('X-Laika-Require', '');
+        $requireKeys = empty(trim($requireHeader)) ? [] : array_values(
+            array_filter(array_map('trim', explode(',', $requireHeader)))
         );
+
+        $onlyHeader = (string) Request::header('X-Laika-Only', '');
+        $onlyPaths = empty(trim($onlyHeader)) ? [] : array_values(
+            array_filter(array_map('trim', explode(',', $onlyHeader)))
+        );
+
+        // Only is only available on Partial requests
+        $useOnly = $isPartial && !$forceFull && !empty($onlyPaths);
+        $onlyMap = $useOnly ? $this->buildOnlyMap($onlyPaths) : [];
+
+        // If only is used, allow require to widen it (root-level widening)
+        if ($useOnly && !empty($requireKeys)) {
+            foreach ($requireKeys as $key) {
+                $onlyMap[$key] = $onlyMap[$key] ?? null;
+            }
+        }
 
         $result = [];
         /** @var Entry $entry */
         foreach ($this->entries as $key => $entry) {
+            if ($useOnly && !array_key_exists($key, $onlyMap)) {
+                continue;
+            }
+
             if ($entry->mode === PayloadMode::ONCE) {
                 $required = in_array($key, $requireKeys, true);
-
                 if ($isPartial && !$forceFull && !$required) {
                     continue;
                 }
             }
+
             if (!$entry->include()) {
                 continue;
             }
-            $result[$key] = $entry->resolve();
+
+            $subpaths = $useOnly ? ($onlyMap[$key] ?? null) : null;
+            $result[$key] = $entry->resolve($subpaths);
+        }
+        return $result;
+    }
+
+    /**
+     *
+     * @param string[] $paths
+     * @return array
+     */
+    protected function buildOnlyMap(array $paths): array
+    {
+        $map = [];
+
+        foreach ($paths as $path) {
+            $path = trim($path);
+            if ($path === '') {
+                continue;
+            }
+
+            $parts = explode('.', $path, 2);
+            $root = $parts[0];
+            $rest = $parts[1] ?? null;
+
+            if ($rest === null || $rest === '') {
+                $map[$root] = null;
+                continue;
+            }
+
+            if (array_key_exists($root, $map) && $map[$root] === null) {
+                continue;
+            }
+
+            $map[$root] ??= [];
+            $map[$root][] = $rest;
         }
 
-        return $result;
+        foreach ($map as $k => $v) {
+            if (is_array($v)) {
+                $map[$k] = array_values(array_unique($v));
+            }
+        }
+
+        return $map;
     }
 
     /**
