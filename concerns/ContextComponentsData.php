@@ -38,6 +38,7 @@ trait ContextComponentsData
         $result = [];
         foreach ($this->layout->components as $key => $component) {
             /** @var ComponentBase $component */
+            $component->runLifeCycle();
             $alias = $component->alias ?: (string) $key;
 
             $result[$alias] = $this->buildFullComponentData($alias, $component, 'layout');
@@ -109,6 +110,8 @@ trait ContextComponentsData
 
             $scope = $found['scope'];
             $component = $found['component'];
+
+            // Resolve Tailor Components
 
             if (!empty($spec['__full'])) {
                 $out[$alias] = $this->buildFullComponentData($alias, $component, $scope);
@@ -212,7 +215,7 @@ trait ContextComponentsData
     protected function resolveComponentPropsFull(object $object): array
     {
         try {
-            $vars = method_exists($object, 'getPageVars') ? ($object->getPageVars() ?? []) : [];
+            $vars = $object->methodExists('getPageVars') ? ($object->getPageVars() ?? []) : [];
             return is_array($vars) ? $vars : (array) $vars;
         } catch (\Throwable $exc) {
             return [];
@@ -229,7 +232,11 @@ trait ContextComponentsData
     {
         $eagers = [];
         try {
-            $eagers = method_exists($object, 'property') ? ($object->property('eager') ?? []) : [];
+            if ($object instanceof \Tailor\Classes\ComponentVariable) {
+                $eagers = $object->getComponent()->property('eager');
+            } else {
+                $eagers = method_exists($object, 'property') ? ($object->property('eager') ?? []) : [];
+            }
         } catch (\Throwable $exc) {
             $eagers = [];
         }
@@ -239,18 +246,29 @@ trait ContextComponentsData
                 continue;
             }
 
+            $filter = null;
+            if (strpos($eager, '.') !== false) {
+                [$eager, $filter] = explode('.', $eager);
+            }
+
             if (method_exists($object, $eager)) {
                 try {
                     $props[$eager] = $object->{$eager}();
+                    if (!empty($filter)) {
+                        $props[$eager] = $props[$eager]->{$filter}();
+                    }
                 } catch (\Throwable $exc) {
                     $props[$eager] = null;
                 }
                 continue;
             }
 
-            if (property_exists($object, $eager)) {
+            if ($object instanceof \Tailor\Classes\ComponentVariable || property_exists($object, $eager)) {
                 try {
                     $props[$eager] = $object->{$eager};
+                    if (!empty($filter)) {
+                        $props[$eager] = $props[$eager]->{$filter}();
+                    }
                 } catch (\Throwable $exc) {
                     $props[$eager] = null;
                 }
@@ -277,7 +295,7 @@ trait ContextComponentsData
             }
         }
 
-        if (property_exists($object, $propName)) {
+        if ($object instanceof \Tailor\Classes\ComponentVariable || property_exists($object, $propName)) {
             try {
                 return $object->{$propName};
             } catch (\Throwable $exc) {

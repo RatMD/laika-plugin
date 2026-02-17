@@ -72,12 +72,48 @@ class Responder
 
         // Laika Response
         $payload = $this->payload->toArray();
-        $only = array_keys($payload);
+        $only = $this->flattenLeafKeys($payload);
+
         return response()->json($payload, 200, [
             'Vary'          => 'X-Laika',
             'X-Laika'       => '1',
             'X-Laika-Only'  => implode(',', $only),
         ]);
+    }
+
+    /**
+     * Flatten to leaf dot-keys only (no intermediate nodes).
+     * @param array $data
+     * @param string $prefix
+     * @return array
+     */
+    protected function flattenLeafKeys(array $data, string $prefix = ''): array
+    {
+        $keys = [];
+
+        foreach ($data as $key => $value) {
+            $path = $prefix === '' ? (string) $key : $prefix . '.' . $key;
+
+            if (is_array($value)) {
+                if ($value === []) {
+                    $keys[] = $path;
+                    continue;
+                }
+
+                $childKeys = $this->flattenLeafKeys($value, $path);
+                if (empty($childKeys)) {
+                    $keys[] = $path;
+                } else {
+                    $keys = array_merge($keys, $childKeys);
+                }
+
+                continue;
+            }
+
+            $keys[] = $path;
+        }
+
+        return $keys;
     }
 
     /**

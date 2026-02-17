@@ -27,7 +27,7 @@ class VueLayout extends CmsLayout
     {% laikaHead %}
     {% vite(['resources/theme.ts']) %}
 </head>
-<body class="theme-{{ this.theme.id }} page-{{ this.page.id }} layout-{{ this.layout.id }}">
+<body class="theme-{{ this.theme.id|lower }} page-{{ this.page.id|lower }} layout-{{ this.layout.id|lower }}">
     {% laika %}
 </body>
 </html>

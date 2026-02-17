@@ -2,8 +2,11 @@
 
 namespace RatMD\Laika\Components;
 
+use Block;
 use Cms\Classes\ComponentBase;
-use Illuminate\Support\Facades\Context;
+use Flash;
+use RatMD\Laika\Services\Placeholders;
+use RatMD\Laika\Services\Shared;
 
 /**
  * Configure Laika Component
@@ -28,14 +31,7 @@ class LaikaComponent extends ComponentBase
      */
     public function defineProperties()
     {
-        return [
-            'component' => [
-                'title'         => "Component Name",
-                'description'   => "The corresponding Vue Component Page name to load.",
-                'type'          => 'string',
-                'default'       => ''
-            ],
-        ];
+        return [];
     }
 
     /**
@@ -43,6 +39,23 @@ class LaikaComponent extends ComponentBase
      */
     public function init()
     {
-        Context::addHidden('laika.component', $this->property('component'));
+        Flash::add('error', 'test');
+        $shared = $this->property('shared');
+        if (!empty($shared) && is_array($shared)) {
+            /** @var Shared $bucket */
+            $bucket = app(Shared::class);
+            foreach ($shared AS $key => $val) {
+                $bucket->set($key, $val);
+            }
+        }
+
+        $placeholders = $this->property('placeholder');
+        if (!empty($placeholders) && is_array($placeholders)) {
+            /** @var Placeholders $bucket */
+            $bucket = app(Placeholders::class);
+            foreach($placeholders AS $name => $defaultValue) {
+                $bucket->set($name, Block::get($name) ?? $defaultValue);
+            }
+        }
     }
 }

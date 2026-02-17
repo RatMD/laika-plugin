@@ -2,10 +2,11 @@
 
 namespace RatMD\Laika\Concerns;
 
-use Illuminate\Support\Facades\Context as RequestContext;
+use Flash;
 use Illuminate\Support\Facades\Request;
 use October\Rain\Support\Str;
 use RatMD\Laika\Services\Meta;
+use RatMD\Laika\Services\Placeholders;
 
 trait ContextPageDetails
 {
@@ -26,6 +27,9 @@ trait ContextPageDetails
         $meta->set('meta_title', $this->readObjectProperty($this->page, 'meta_title') ?? $title);
         $meta->set('meta_description', $this->readObjectProperty($this->page, 'meta_description') ?? null);
 
+        /** @var Placeholders $placeholders */
+        $placeholders = app(Placeholders::class);
+
         // Render Content
         if (Request::header('X-Laika', '0') === '1') {
             $_layout = $this->page->layout;
@@ -38,17 +42,19 @@ trait ContextPageDetails
 
         // Return
         return [
-            'id'        => $id,
-            'url'       => request()->getRequestUri(),
-            'file'      => $fileName,
-            'component' => $this->resolveComponentName(),
-            'props'     => $this->collectPageProps(),
-            'layout'    => $layoutId,
-            'theme'     => $themeId,
-            'locale'    => $this->resolveLocale(),
-            'title'     => $title,
-            'meta'      => $meta->toArray(),
-            'content'   => $content,
+            'id'            => $id,
+            'url'           => request()->getRequestUri(),
+            'file'          => $fileName,
+            'component'     => $this->resolveComponentName(),
+            'props'         => $this->collectPageProps(),
+            'layout'        => $layoutId,
+            'theme'         => $themeId,
+            'locale'        => $this->resolveLocale(),
+            'title'         => $title,
+            'meta'          => $meta->toArray(),
+            'flash'         => Flash::all(),
+            'content'       => $content,
+            'placeholders'  => $placeholders->toArray()
         ];
     }
 
@@ -58,11 +64,6 @@ trait ContextPageDetails
      */
     public function resolveComponentName(): string
     {
-        $component = RequestContext::getHidden('laika.component');
-        if (!empty($component)) {
-            return $component;
-        }
-
         $file = $this->readObjectProperty($this->page, ['fileName', 'file_name', 'baseFileName']) ?? $this->page?->layout ?? null;
         $file = $file ? str_replace('\\', '/', $file) : null;
         $file = $file ? preg_replace('/\.htm(l)?$/i', '', $file) : null;

@@ -2,12 +2,48 @@
 
 namespace RatMD\Laika\Http\Controller;
 
+use Cms\Classes\PageManager;
+use Cms\Classes\Theme;
+use Cms\Models\PageLookupItem;
+use Flash;
 use Markdown;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class LaikaController
 {
+    /**
+     *
+     * @param Request $request
+     * @return RedirectResponse
+     */
+    public function resolveLink(Request $request): RedirectResponse
+    {
+        $path = trim($request->query('path', ''));
+        $theme = trim($request->query('theme', ''));
+        if (empty($path) || empty($theme)) {
+            Flash::add('error', 'The provided link is missing or has malformed parameters.');
+            return redirect('/');
+        }
+
+        $address = base64_decode($path);
+        if ($address === false || trim($address) === '') {
+            Flash::add('error', 'The provided link is not properly encoded.');
+            return redirect('/');
+        }
+
+        Theme::setActiveTheme($theme);
+
+        $result = PageManager::url($address);
+        if (empty($result)) {
+            Flash::add('error', 'The requested destination does not exist.');
+            return redirect('/');
+        } else {
+            return redirect($result);
+        }
+    }
+
     /**
      *
      * @param Request $request

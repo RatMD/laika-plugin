@@ -4,6 +4,7 @@ namespace RatMD\Laika;
 
 use Ini;
 use Backend\Classes\Controller as BackendController;
+use Cms;
 use Cms\Classes\CmsCompoundObject;
 use Cms\Classes\CmsController;
 use Cms\Classes\ComponentBase;
@@ -12,8 +13,10 @@ use Cms\Classes\Layout as CmsLayout;
 use Cms\Classes\Meta;
 use Cms\Classes\Page as CmsPage;
 use Cms\Classes\Theme;
+use Cms\Models\PageLookupItem;
 use Illuminate\Foundation\Vite;
 use October\Rain\Support\Facades\Event;
+use October\Rain\Support\Str;
 use RatMD\Laika\Classes\EditorExtension;
 use RatMD\Laika\Classes\LaikaFactory;
 use RatMD\Laika\Components\LaikaComponent;
@@ -27,6 +30,7 @@ use RatMD\Laika\Services\Shared;
 use RatMD\Laika\Support\Indent;
 use RatMD\Laika\Support\SFC;
 use RatMD\Laika\Twig\Extension;
+use Site;
 use System\Classes\PluginBase;
 use Twig\Environment;
 
@@ -113,7 +117,7 @@ class Plugin extends PluginBase
             'components',   // Page + Layout components
             fn (Context $context, ?array $only) => $context->getComponentsData($only)
         );
-        Laika::always(
+        Laika::once(
             'october',      // October settings
             fn (Context $context) => $context->getOctoberDetails()
         );
@@ -137,7 +141,7 @@ class Plugin extends PluginBase
             $twig->addExtension(new Extension);
         });
 
-        // Handle Render
+        // Inject static Vue Layout
         Event::listen(
             'cms.page.init',
             function (Controller $controller, string $url, ?CmsPage $page = null) {
@@ -146,6 +150,7 @@ class Plugin extends PluginBase
                         /** @var mixed $this */
                         if (str_ends_with($this->page->fileName, '.vue')) {
                             $this->layout = VueLayout::createDefaultLayout();
+                            $this->page->content = '';
                         }
                     },
                     $controller,
@@ -153,12 +158,61 @@ class Plugin extends PluginBase
                 )->call($controller);
             }
         );
+
+        // Render empty page on .vue files
+        Event::listen(
+            'cms.page.beforeRenderPage',
+            function (Controller $controller, CmsPage $page) {
+                if (str_ends_with($page->fileName, '.vue')) {
+                    return " ";
+                }
+            }
+        );
+
+        // Respond on partial requests
         Event::listen(
             'cms.page.display',
             function (Controller $controller, string $url, CmsPage $page, $result) {
                 /** @var Responder $responder */
                 $responder = app(Responder::class);
                 return $responder->respond($controller, $page, $url, $result);
+            }
+        );
+
+        // Resolve .vue lookups
+        Event::listen(
+            'cms.pageLookup.resolveItem',
+            function (string $type, PageLookupItem $item, string $currentUrl, Theme $theme) {
+                if ($item->type !== 'cms-page' || !$item->reference) {
+                    return null;
+                }
+
+                $vueReference = Str::ucfirst($item->reference) . '.vue';
+                $page = CmsPage::loadCached($theme, $vueReference);
+                $pageUrl = Cms::pageUrl($vueReference, []);
+
+                $result = [];
+                $result['url'] = $pageUrl;
+                $result['isActive'] = false;
+                $result['mtime'] = $page ? $page->mtime : null;
+
+                if ($item->sites) {
+                    $sites = [];
+                    if (Site::hasMultiSite()) {
+                        foreach (Site::listEnabled() as $site) {
+                            $sites[] = [
+                                'url' => Cms::siteUrl($page, $site),
+                                'id' => $site->id,
+                                'code' => $site->code,
+                                'locale' => $site->hard_locale,
+                            ];
+                        }
+                    }
+
+                    $result['sites'] = $sites;
+                }
+
+                return $result;
             }
         );
 
