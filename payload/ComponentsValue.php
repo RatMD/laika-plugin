@@ -6,6 +6,7 @@ use Cms\Classes\CmsCompoundObject;
 use Cms\Classes\ComponentBase;
 use Cms\Components\Resources;
 use October\Rain\Support\Arr;
+use October\Rain\Support\Str;
 use RatMD\Laika\Contracts\PayloadProvider;
 use RatMD\Laika\Enums\PayloadMode;
 use RatMD\Laika\Services\Context;
@@ -246,13 +247,42 @@ class ComponentsValue implements PayloadProvider
                 }
 
                 if ($component instanceof CollectionComponent) {
+                    $relations = $component->property('relations', []);
+                    $paginate = (int) $component->property('paginate', 0);
                     $model = $component->getPrimaryRecordQuery();
-                    $items = $model->get();
 
-                    if (!empty($component->property('relations', []))) {
-                        $items->load($component->property('relations', []));
+                    // Execute Where clauses
+                    $clauses = $component->property('where', []);
+                    if (is_array($clauses)) {
+                        $params = $component->property('whereParams', []);
+
+                        foreach ($clauses AS $clause) {
+                            $args = explode(',', $clause);
+                            $method = array_shift($args);
+                            $args = array_map(function ($val) use ($params) {
+                                if (str_starts_with($val, '$')) {
+                                    return $params[substr($val, 1)] ?? null;
+                                } else {
+                                    return $val;
+                                }
+                            }, $args);
+                            $model->{$method}(...$args);
+                        }
                     }
 
+                    // Paginate / Select Items
+                    if ($paginate <= 0 || !is_numeric($paginate)) {
+                        $items = $model->get();
+                    } else {
+                        $items = $model->paginate($paginate);
+                    }
+
+                    // Load Relationships
+                    if (!empty($relations)) {
+                        $items->load($relations);
+                    }
+
+                    // Return
                     $alias = $component->property('as', 'items');
                     return [
                         $alias => $items->toArray(),
@@ -260,8 +290,8 @@ class ComponentsValue implements PayloadProvider
                 }
 
                 if ($component instanceof SectionComponent) {
-                    $model = $component->getPrimaryRecordQuery();
-                    return [];
+                    $model = $component->getPrimaryRecordResult();
+                    return $model->toArray();
                 }
 
                 if ($component instanceof GlobalComponent) {
@@ -292,14 +322,16 @@ class ComponentsValue implements PayloadProvider
         $props = $object->getProperties();
 
         foreach ($props AS $tag => $values) {
-            if (!in_array($tag, ['css', 'js', 'meta', 'vars'])) {
+            if (!in_array($tag, ['_css', '_js', 'meta', 'vars'])) {
                 continue;
             }
 
             foreach ($values AS $key => $value) {
-                if ($tag === 'css') {
+                if ($tag === '_css') {
+                    $key = empty($key) ? (string) Str::uuid() : $key;
                     $this->head->link(['id' => $key, 'rel' => 'stylesheet', 'type' => 'text/css', 'href' => $value]);
-                } else if ($tag === 'js') {
+                } else if ($tag === '_js') {
+                    $key = empty($key) ? Str::uuid() : $key;
                     $this->head->script(['id' => $key, 'type' => 'text/javascript', 'src' => $value]);
                 } else if ($tag === 'meta') {
                     $this->head->meta(['name' => $key, 'content' => $value]);

@@ -338,7 +338,7 @@ class Plugin extends PluginBase
             if (is_array($ini)) {
                 $components = [];
 
-                foreach ($ini as $key => $value) {
+                foreach ($ini as $key => &$value) {
                     if ($key === 'settings') {
                         continue;
                     }
@@ -346,6 +346,16 @@ class Plugin extends PluginBase
                     // Fix to merge page.[resources] with layout.[resources]
                     if ($key === 'resources' && is_array($value)) {
                         $key .= ' ' . str_replace('.', '', (string) microtime(true));
+
+                        if (array_key_exists('css', $value)) {
+                            $value['_css'] = $value['css'];
+                            unset($value['css']);
+                        }
+
+                        if (array_key_exists('js', $value)) {
+                            $value['_js'] = $value['js'];
+                            unset($value['js']);
+                        }
                     }
 
                     $model->setAttribute($key, $value);

@@ -2,6 +2,7 @@
 
 namespace RatMD\Laika\Services;
 
+use Cms\Classes\Theme;
 use Illuminate\Contracts\Support\Arrayable;
 
 class Head implements Arrayable
@@ -142,6 +143,14 @@ class Head implements Arrayable
             $key .= '|' . $attrs['rel'];
         }
 
+        if (str_starts_with($attrs['href'], '@')) {
+            $theme = Theme::getActiveTheme();
+            $theme = $theme->hasParentTheme() ? $theme->getParentTheme() : $theme;
+            $dirName = Theme::getActiveTheme()->getDirName();
+            $href = "/themes/{$dirName}/" . substr($attrs['href'], 2);
+            $attrs['href'] = $href;
+        }
+
         return $this->set('link', $key, $this->filter($attrs, $allowed));
     }
 
@@ -190,6 +199,14 @@ class Head implements Arrayable
         }
         if (!empty($attrs['type'])) {
             $key .= '|' . $attrs['type'];
+        }
+
+        if (str_starts_with($attrs['src'], '@')) {
+            $theme = Theme::getActiveTheme();
+            $theme = $theme->hasParentTheme() ? $theme->getParentTheme() : $theme;
+            $dirName = Theme::getActiveTheme()->getDirName();
+            $src = "/themes/{$dirName}/" . substr($attrs['src'], 2);
+            $attrs['src'] = $src;
         }
 
         return $this->set('script', $key, $this->filter($attrs, $allowed));
