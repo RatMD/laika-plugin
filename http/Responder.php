@@ -25,23 +25,6 @@ class Responder
 
     /**
      *
-     * @return string
-     */
-    static public function createToken()
-    {
-        $expires = time() + 15 * 60;
-        $nonce = bin2hex(random_bytes(16));
-        $secret = config('app.key');
-
-        return csrf_token() . '|' . base64_encode(json_encode([
-            'exp'   => $expires,
-            'nonce' => $nonce,
-            'sig'   => hash_hmac('sha256', $expires . ':' . $nonce, $secret),
-        ]));
-    }
-
-    /**
-     *
      * @param Controller $controller
      * @param Page $page
      * @param string $url
@@ -72,7 +55,12 @@ class Responder
 
         // Laika Response
         $payload = $this->payload->toArray();
-        $only = $this->flattenLeafKeys($payload);
+
+        if ($this->request->hasHeader('X-Laika-Require') || $this->request->hasHeader('X-Laika-Only')) {
+            $only = $this->flattenLeafKeys($payload);
+        } else {
+            $only = array_keys($payload);
+        }
 
         return response()->json($payload, 200, [
             'Vary'          => 'X-Laika',

@@ -21,13 +21,11 @@ class VueLayout extends CmsLayout
 <!DOCTYPE html>
 <html lang="{{ this.locale }}" class="no-js">
 <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ this.page.title }}</title>
     {% laikaHead %}
     {% vite(['resources/theme.ts']) %}
 </head>
-<body class="theme-{{ this.theme.id|lower }} page-{{ this.page.id|lower }} layout-{{ this.layout.id|lower }}">
+<body class="theme-{{ this.theme.id|lower }} layout-{{ this.layout.id|lower }} page-{{ this.page.id|lower }}" data-theme="{{ this.theme.id|lower }}" data-layout="{{ this.layout.id|lower }}" data-page="{{ this.page.id|lower }}">
     {% laika %}
 </body>
 </html>

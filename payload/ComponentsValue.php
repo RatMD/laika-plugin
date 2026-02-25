@@ -1,24 +1,61 @@
 <?php declare(strict_types=1);
 
-namespace RatMD\Laika\Concerns;
+namespace RatMD\Laika\Payload;
 
+use Cms\Classes\CmsCompoundObject;
 use Cms\Classes\ComponentBase;
+use Cms\Components\Resources;
 use October\Rain\Support\Arr;
+use RatMD\Laika\Contracts\PayloadProvider;
+use RatMD\Laika\Enums\PayloadMode;
+use RatMD\Laika\Services\Context;
+use RatMD\Laika\Services\Head;
+use RatMD\Laika\Services\Shared;
 use RatMD\Laika\Support\PHP;
+use Tailor\Components\CollectionComponent;
+use Tailor\Components\GlobalComponent;
+use Tailor\Components\SectionComponent;
 
-trait ContextComponentsData
+/**
+ * Current Page Components.
+ */
+class ComponentsValue implements PayloadProvider
 {
     /**
-     * Get components data
-     * @param null|string[] $only
-     * @return array
+     *
+     * @param Context $context
+     * @param Shared $shared
+     * @param Head $head
+     * @return void
      */
-    public function getComponentsData(?array $only = null): array
+    public function __construct(
+        protected Context $context,
+        protected Shared $shared,
+        protected Head $head,
+    ) { }
+
+    /**
+     * @inheritdoc
+     */
+    public function getMode(): PayloadMode
+    {
+        return PayloadMode::ALWAYS;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function toPayload(?array $only = null): mixed
     {
         if (!$only) {
+            $layout = $this->context->layout;
+            if (empty($layout->components)) {
+                $layout = $this->context->controller->getLayout();
+            }
+
             return array_merge(
-                $this->collectLayoutComponents(),
-                $this->collectPageComponents()
+                $this->collectComponents($layout),
+                $this->collectComponents($this->context->page),
             );
         } else {
             return $this->collectComponentsPartial($only);
@@ -26,43 +63,29 @@ trait ContextComponentsData
     }
 
     /**
-     * Collect all layout components.
+     * Collect the components from the passed CmsCompoundObject.
+     * @param ?CmsCompoundObject $object
      * @return array
      */
-    public function collectLayoutComponents(): array
+    public function collectComponents(?CmsCompoundObject $object): array
     {
-        if (empty($this->layout) || empty($this->layout->components)) {
+        if (empty($object)) {
+            return [];
+        }
+        if (empty($object->components)) {
             return [];
         }
 
         $result = [];
-        foreach ($this->layout->components as $key => $component) {
+        foreach ($object->components as $key => $component) {
             /** @var ComponentBase $component */
-            $component->runLifeCycle();
+            if (!$component->__hasRunLifeCycle) {
+                $component->runLifeCycle();
+            }
+
             $alias = $component->alias ?: (string) $key;
 
-            $result[$alias] = $this->buildFullComponentData($alias, $component, 'layout');
-        }
-
-        return $result;
-    }
-
-    /**
-     * Collect all page components.
-     * @return array
-     */
-    public function collectPageComponents(): array
-    {
-        if (empty($this->page) || empty($this->page->components)) {
-            return [];
-        }
-
-        $result = [];
-        foreach ($this->page->components as $key => $component) {
-            /** @var ComponentBase $component */
-            $alias = $component->alias ?: (string) $key;
-
-            $result[$alias] = $this->buildFullComponentData($alias, $component, 'page');
+            $result[$alias] = $this->buildFullComponentData($alias, $component);
         }
 
         return $result;
@@ -103,18 +126,13 @@ trait ContextComponentsData
 
         $out = [];
         foreach ($aliases as $alias => $spec) {
-            $found = $this->findComponentByAlias($alias);
-            if (!$found) {
+            $component = $this->findComponentByAlias($alias);
+            if (!$component) {
                 continue;
             }
 
-            $scope = $found['scope'];
-            $component = $found['component'];
-
-            // Resolve Tailor Components
-
             if (!empty($spec['__full'])) {
-                $out[$alias] = $this->buildFullComponentData($alias, $component, $scope);
+                $out[$alias] = $this->buildFullComponentData($alias, $component);
                 continue;
             }
 
@@ -139,26 +157,26 @@ trait ContextComponentsData
     /**
      * Find a component by alias and return both scope and component.
      * @param string $alias
-     * @return array|null
+     * @return ?ComponentBase
      */
-    protected function findComponentByAlias(string $alias): ?array
+    protected function findComponentByAlias(string $alias): ?ComponentBase
     {
-        if (!empty($this->layout?->components)) {
-            foreach ($this->layout->components as $key => $component) {
+        if (!empty($this->context->layout?->components)) {
+            foreach ($this->context->layout->components as $key => $component) {
                 /** @var ComponentBase $component */
                 $a = $component->alias ?: (string) $key;
                 if ($a === $alias) {
-                    return ['scope' => 'layout', 'component' => $component];
+                    return $component;
                 }
             }
         }
 
-        if (!empty($this->page?->components)) {
-            foreach ($this->page->components as $key => $component) {
+        if (!empty($this->context->page?->components)) {
+            foreach ($this->context->page->components as $key => $component) {
                 /** @var ComponentBase $component */
                 $a = $component->alias ?: (string) $key;
                 if ($a === $alias) {
-                    return ['scope' => 'page', 'component' => $component];
+                    return $component;
                 }
             }
         }
@@ -170,10 +188,9 @@ trait ContextComponentsData
      * Build the full component payload entry.
      * @param string $alias
      * @param ComponentBase $component
-     * @param string $scope
      * @return array
      */
-    protected function buildFullComponentData(string $alias, ComponentBase $component, string $scope = 'page'): array
+    protected function buildFullComponentData(string $alias, ComponentBase $component): array
     {
         $object = $this->resolveComponentObject($alias, $component);
 
@@ -199,7 +216,7 @@ trait ContextComponentsData
      */
     protected function resolveComponentObject(string $alias, ComponentBase $component): object
     {
-        $object = ($this->controller?->vars[$alias] ?? null) ?? $component;
+        $object = ($this->context->controller?->vars[$alias] ?? null) ?? $component;
         if (!is_object($object)) {
             return $component;
         } else {
@@ -215,10 +232,81 @@ trait ContextComponentsData
     protected function resolveComponentPropsFull(object $object): array
     {
         try {
+            if ($object instanceof Resources) {
+                $this->applyResources($object);
+                return [];
+            }
+
+            if (method_exists($object, 'getComponent')) {
+                $component = $object->getComponent();
+
+                if ($component instanceof Resources) {
+                    $this->applyResources($object);
+                    return [];
+                }
+
+                if ($component instanceof CollectionComponent) {
+                    $model = $component->getPrimaryRecordQuery();
+                    $items = $model->get();
+
+                    if (!empty($component->property('relations', []))) {
+                        $items->load($component->property('relations', []));
+                    }
+
+                    $alias = $component->property('as', 'items');
+                    return [
+                        $alias => $items->toArray(),
+                    ];
+                }
+
+                if ($component instanceof SectionComponent) {
+                    $model = $component->getPrimaryRecordQuery();
+                    return [];
+                }
+
+                if ($component instanceof GlobalComponent) {
+                    $model = $component->getPrimaryRecordQuery();
+
+                    $result = [];
+                    foreach ($model->getFieldsetColumnNames() AS $field) {
+                        $result[$field] = $object->{$field} ?? null;
+                    }
+                    return $result;
+                }
+            }
+
             $vars = $object->methodExists('getPageVars') ? ($object->getPageVars() ?? []) : [];
             return is_array($vars) ? $vars : (array) $vars;
         } catch (\Throwable $exc) {
             return [];
+        }
+    }
+
+    /**
+     *
+     * @param Resources $object
+     * @return void
+     */
+    protected function applyResources(Resources $object)
+    {
+        $props = $object->getProperties();
+
+        foreach ($props AS $tag => $values) {
+            if (!in_array($tag, ['css', 'js', 'meta', 'vars'])) {
+                continue;
+            }
+
+            foreach ($values AS $key => $value) {
+                if ($tag === 'css') {
+                    $this->head->link(['id' => $key, 'rel' => 'stylesheet', 'type' => 'text/css', 'href' => $value]);
+                } else if ($tag === 'js') {
+                    $this->head->script(['id' => $key, 'type' => 'text/javascript', 'src' => $value]);
+                } else if ($tag === 'meta') {
+                    $this->head->meta(['name' => $key, 'content' => $value]);
+                } else if ($tag === 'vars') {
+                    $this->shared->share($key, $value);
+                }
+            }
         }
     }
 

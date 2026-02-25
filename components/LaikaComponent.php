@@ -4,7 +4,6 @@ namespace RatMD\Laika\Components;
 
 use Block;
 use Cms\Classes\ComponentBase;
-use Flash;
 use RatMD\Laika\Services\Placeholders;
 use RatMD\Laika\Services\Shared;
 
@@ -39,13 +38,12 @@ class LaikaComponent extends ComponentBase
      */
     public function init()
     {
-        Flash::add('error', 'test');
         $shared = $this->property('shared');
         if (!empty($shared) && is_array($shared)) {
             /** @var Shared $bucket */
             $bucket = app(Shared::class);
             foreach ($shared AS $key => $val) {
-                $bucket->set($key, $val);
+                $bucket->share($key, $val);
             }
         }
 

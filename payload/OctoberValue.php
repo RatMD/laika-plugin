@@ -1,24 +1,46 @@
 <?php declare(strict_types=1);
 
-namespace RatMD\Laika\Concerns;
+namespace RatMD\Laika\Payload;
 
 use Config;
+use Lang;
 use Url;
 use Cms\Classes\Page;
 use Illuminate\Support\Facades\Request;
-use Lang;
 use October\Rain\Support\Str;
+use RatMD\Laika\Contracts\PayloadProvider;
+use RatMD\Laika\Enums\PayloadMode;
+use RatMD\Laika\Services\Context;
 
-trait ContextOctoberDetails
+/**
+ * Current October settings.
+ */
+class OctoberValue implements PayloadProvider
 {
     /**
      *
-     * @return array
+     * @param Context $context
+     * @return void
      */
-    public function getOctoberDetails(): array
+    public function __construct(
+        protected Context $context
+    ) { }
+
+    /**
+     * @inheritdoc
+     */
+    public function getMode(): PayloadMode
+    {
+        return PayloadMode::ONCE;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function toPayload(?array $only = null): mixed
     {
         $baseUrl = rtrim(Url::to('/'), '/');
-        $themeDir = $this->theme?->getDirName() ?: 'default';
+        $themeDir = $this->context->theme?->getDirName() ?: 'default';
 
         // Base Theme URL
         $themesAssetUrl = (string) (Config::get('system.themes_asset_url') ?: '/themes');
@@ -44,7 +66,7 @@ trait ContextOctoberDetails
         // Collect Pages
         $pages = [];
         try {
-            $pagesList = Page::listInTheme($this->theme, true);
+            $pagesList = Page::listInTheme($this->context->theme, true);
             foreach ($pagesList as $page) {
                 /** @var \Cms\Classes\Page $page */
                 $name = Str::lower($page->getBaseFileName());
@@ -57,8 +79,7 @@ trait ContextOctoberDetails
             $pages = [];
         }
 
-        // Export
-        return [
+        $result = [
             'baseUrl'       => $baseUrl,
             'themeBaseUrl'  => $themeBaseUrl,
             'mediaBaseUrl'  => $mediaBaseUrl,
@@ -73,6 +94,12 @@ trait ContextOctoberDetails
             'fallbackLocale'=> app()->getFallbackLocale(),
             'strings'       => $this->collectStrings()
         ];
+
+        if (is_array($only)) {
+            $result = array_intersect_key($result, array_flip($only));
+        }
+
+        return $result;
     }
 
     /**
@@ -91,7 +118,7 @@ trait ContextOctoberDetails
             $fallbackLocale = null;
         }
 
-        $i18nFile = themes_path($this->theme->getDirName() . '/resources/laika.i18n.json');
+        $i18nFile = themes_path($this->context->theme->getDirName() . '/resources/laika.i18n.json');
         if (!is_file($i18nFile)) {
             return [$currentLocale => []];
         }

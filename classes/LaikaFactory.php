@@ -2,82 +2,119 @@
 
 namespace RatMD\Laika\Classes;
 
-use RatMD\Laika\Services\Payload;
+use RatMD\Laika\Enums\PayloadMode;
+use RatMD\Laika\Services\Head;
+use RatMD\Laika\Services\Shared;
 
 class LaikaFactory
 {
     /**
      *
-     * @param Payload $payload
+     * @param Shared $shared
+     * @param Head $head
      * @return void
      */
     public function __construct(
-        protected readonly Payload $payload
+        protected readonly Shared $shared,
+        protected readonly Head $head,
     ) { }
 
     /**
-     *
+     * Add a shared property.
      * @param string $key
      * @param mixed $value
-     * @return Payload
+     * @param PayloadMode $mode
+     * @param ?callable $condition
+     * @return Shared
      */
-    public function once(string $key, mixed $value): Payload
+    public function share(string $key, mixed $value, PayloadMode $mode = PayloadMode::ALWAYS, ?callable $condition = null): Shared
     {
-        return $this->payload->once($key, $value);
+        return $this->shared->share($key, $value, $mode, $condition);
     }
 
     /**
-     *
+     * Add a shared property (included in every request).
      * @param string $key
      * @param mixed $value
-     * @return Payload
+     * @param null|callable $condition
+     * @return Shared
      */
-    public function always(string $key, mixed $value): Payload
+    public function shareAlways(string $key, mixed $value, ?callable $condition = null): Shared
     {
-        return $this->payload->always($key, $value);
+        return $this->shared->always($key, $value, $condition);
     }
 
     /**
-     *
+     * Add a shared property (included in initial / force requests only).
+     * @param string $key
+     * @param mixed $value
+     * @param null|callable $condition
+     * @return Shared
+     */
+    public function shareOnce(string $key, mixed $value, ?callable $condition = null): Shared
+    {
+        return $this->shared->once($key, $value, $condition);
+    }
+
+    /**
+     * Add a shared property using a condition.
+     * @param string $key
+     * @param mixed $value
      * @param callable $condition
-     * @param string $key
-     * @param mixed $value
-     * @return Payload
+     * @return Shared
      */
-    public function when(callable $condition, string $key, mixed $value): Payload
+    public function shareWhen(string $key, mixed $value, callable $condition): Shared
     {
-        return $this->payload->when($condition, $key, $value);
+        return $this->shared->when($key, $value, $condition);
     }
 
     /**
-     *
+     * Add a shared property using a condition.
+     * @param string $key
+     * @param mixed $value
      * @param callable $condition
-     * @param string $key
-     * @param mixed $value
-     * @return Payload
+     * @return Shared
      */
-    public function unless(callable $condition, string $key, mixed $value): Payload
+    public function shareUnless(string $key, mixed $value, callable $condition): Shared
     {
-        return $this->payload->unless($condition, $key, $value);
+        return $this->shared->unless($key, $value, $condition);
     }
 
     /**
-     *
-     * @param string|array $key
-     * @param mixed|null $value
-     * @return Payload
+     * Flush the shared object storage.
+     * @return Shared
      */
-    public function share(string|array $key, mixed $value = null): Payload
+    public function flushShared(): Shared
     {
-        return $this->payload->share($key, $value);
+        return $this->shared->flush();
     }
 
-    /**
-     *
-     * @return void
-     */
-    public function flush(): void
+
+
+
+    public function meta(array $attrs)
     {
-        $this->payload->flush();
+        return $this->head->meta($attrs);
     }
+
+    public function link(array $attrs)
+    {
+        return $this->head->link($attrs);
+    }
+
+    public function style(array $attrs, string $content)
+    {
+        return $this->head->style($attrs, $content);
+    }
+
+    public function script(array $attrs)
+    {
+        return $this->head->script($attrs);
+    }
+
+    public function inlineScript(array $attrs, string $content)
+    {
+        return $this->head->inlineScript($attrs, $content);
+    }
+
 }

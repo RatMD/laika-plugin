@@ -5,8 +5,8 @@ namespace RatMD\Laika\Support;
 use Illuminate\Contracts\Support\Arrayable;
 use October\Rain\Support\Arr;
 use RatMD\Laika\Classes\Context;
-use RatMD\Laika\Constants\PayloadMode;
 use RatMD\Laika\Contracts\PartialArrayable;
+use RatMD\Laika\Enums\PayloadMode;
 
 class Entry
 {

@@ -3,6 +3,7 @@
 namespace RatMD\Laika\Twig;
 
 use Illuminate\Foundation\Vite;
+use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Js;
 use RatMD\Laika\Services\Context;
 use RatMD\Laika\Services\ContextResolver;
@@ -32,15 +33,22 @@ class Extension extends AbstractExtension
      */
     public function laikaHeadFunction(array $context = [])
     {
+        if (Request::header('X-Laika', '0') === '1') {
+            return '';
+        }
+
         $resolver = app(ContextResolver::class);
         $resolver->set(Context::createFromTwigContext($context));
 
         $payload = app(Payload::class);
-        $script  = '<script type="application/json" data-laika="payload">';
-        $script .= Js::encode($payload->toArray());
-        $script .= '</script>';
+        $array = $payload->toArray();
 
-        return new Markup($script, 'UTF-8');
+        $content  = implode("\n", $array['page']['head'] ?? []);
+        $content .= '<script type="application/json" data-laika="payload">';
+        $content .= Js::encode($array);
+        $content .= '</script>';
+
+        return new Markup($content, 'UTF-8');
     }
 
     /**

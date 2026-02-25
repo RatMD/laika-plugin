@@ -2,19 +2,19 @@
 
 namespace RatMD\Laika;
 
-use Ini;
-use Backend\Classes\Controller as BackendController;
 use Cms;
+use Site as SiteManager;
+use Backend\Classes\Controller as BackendController;
 use Cms\Classes\CmsCompoundObject;
 use Cms\Classes\CmsController;
 use Cms\Classes\ComponentBase;
 use Cms\Classes\Controller;
 use Cms\Classes\Layout as CmsLayout;
-use Cms\Classes\Meta;
 use Cms\Classes\Page as CmsPage;
-use Cms\Classes\Theme;
+use Cms\Classes\Theme as CmsTheme;
 use Cms\Models\PageLookupItem;
 use Illuminate\Foundation\Vite;
+use Illuminate\Support\Facades\Request;
 use October\Rain\Support\Facades\Event;
 use October\Rain\Support\Str;
 use RatMD\Laika\Classes\EditorExtension;
@@ -23,14 +23,22 @@ use RatMD\Laika\Components\LaikaComponent;
 use RatMD\Laika\Http\Middleware\LaikaTokenMiddleware;
 use RatMD\Laika\Http\Responder;
 use RatMD\Laika\Objects\VueLayout;
+use RatMD\Laika\Payload\ComponentsValue;
+use RatMD\Laika\Payload\OctoberValue;
+use RatMD\Laika\Payload\PageValue;
+use RatMD\Laika\Payload\SharedValue;
+use RatMD\Laika\Payload\SiteValue;
+use RatMD\Laika\Payload\ThemeValue;
+use RatMD\Laika\Payload\TokenValue;
+use RatMD\Laika\Payload\VersionValue;
 use RatMD\Laika\Services\Context;
 use RatMD\Laika\Services\ContextResolver;
+use RatMD\Laika\Services\Head;
 use RatMD\Laika\Services\Payload;
+use RatMD\Laika\Services\Placeholders;
 use RatMD\Laika\Services\Shared;
-use RatMD\Laika\Support\Indent;
 use RatMD\Laika\Support\SFC;
 use RatMD\Laika\Twig\Extension;
-use Site;
 use System\Classes\PluginBase;
 use Twig\Environment;
 
@@ -64,32 +72,28 @@ class Plugin extends PluginBase
      */
     public function register()
     {
+        $this->app->singleton(ContextResolver::class);
         $this->app->bind(Context::class, function ($app) {
             return $this->app->make(ContextResolver::class)->get();
         });
 
         $this->app->singleton(LaikaFactory::class);
-        $this->app->singleton(ContextResolver::class);
-        $this->app->singleton(Meta::class);
+        $this->app->singleton(Head::class);
         $this->app->singleton(Payload::class);
+        $this->app->singleton(Placeholders::class);
         $this->app->singleton(Shared::class);
-        $this->app->singleton(Vite::class, function () {
 
-            // @todo When installing a plugin wie plugin:install, october automatically creates and
-            //       uses a child theme ... So this behaviour should be reflected here too(?)
-            $theme = Theme::getActiveTheme()->getDirName();
+        $this->app->singleton(Vite::class, function () {
+            $theme = CmsTheme::getActiveTheme();
+            $theme = $theme->hasParentTheme() ? $theme->getParentTheme() : $theme;
+            $dirName = CmsTheme::getActiveTheme()->getDirName();
+
             $vite = new Vite;
             $vite->useManifestFilename(".vite/manifest.json");
-            $vite->useBuildDirectory("themes/{$theme}/assets");
-            $vite->useHotFile(themes_path("{$theme}/assets/.hot"));
+            $vite->useBuildDirectory("themes/{$dirName}/assets");
+            $vite->useHotFile(themes_path("{$dirName}/assets/.hot"));
             return $vite;
         });
-
-        $this->app->alias(LaikaFactory::class, 'laika');
-        $this->app->alias(Context::class, 'laika.context');
-        $this->app->alias(Meta::class, 'laika.meta');
-        $this->app->alias(Payload::class, 'laika.payload');
-        $this->app->alias(Shared::class, 'laika.shared');
     }
 
     /**
@@ -97,34 +101,22 @@ class Plugin extends PluginBase
      */
     public function boot()
     {
-        Laika::once(
-            'version',      // Current asset version
-            fn (Context $context) => $context->getAssetVersion()
-        );
-        Laika::once(
-            'token',        // Laika Request Token
-            fn (Context $context) => Responder::createToken()
-        );
-        Laika::once(
-            'theme',        // Theme details
-            fn (Context $context) => $context->getThemeDetails()
-        );
-        Laika::always(
-            'page',         // Current page details
-            fn (Context $context) => $context->getPageDetails()
-        );
-        Laika::always(
-            'components',   // Page + Layout components
-            fn (Context $context, ?array $only) => $context->getComponentsData($only)
-        );
-        Laika::once(
-            'october',      // October settings
-            fn (Context $context) => $context->getOctoberDetails()
-        );
-        Laika::always(
-            'shared',       // Shared properties
-            fn (Shared $shared, ?array $only) => $shared->toArray($only)
-        );
+        /** @var Payload $payload */
+        $payload = app(Payload::class);
+        $payload->register('version', VersionValue::class);
+        $payload->register('token', TokenValue::class);
+        $payload->register('components', ComponentsValue::class);
+        $payload->register('theme', ThemeValue::class);
+        $payload->register('site', SiteValue::class);
+        $payload->register('page', PageValue::class);
+        $payload->register('october', OctoberValue::class);
+        $payload->register('shared', SharedValue::class);
+
+        /** @var Head $head */
+        $head = app(Head::class);
+        $head->meta(['charset' => 'UTF-8']);
+        $head->meta(['http-equiv' => 'X-UA-Compatible', 'content' => 'IE=edge']);
+        $head->meta(['name' => 'viewport', 'content' => 'width=device-width, initial-scale=1.0, shrink-to-fit=no']);
 
         // Register Laika Middleware
         CmsController::extend(function($controller) {
@@ -133,8 +125,8 @@ class Plugin extends PluginBase
 
         // Extend Core Classes
         ComponentBase::extend(fn (ComponentBase $component) => $this->extendComponentBase($component));
-        CmsPage::extend(fn (CmsPage $page) => $this->extendCmsCompoundObjects($page));
         CmsLayout::extend(fn (CmsLayout $layout) => $this->extendCmsCompoundObjects($layout));
+        CmsPage::extend(fn (CmsPage $page) => $this->extendCmsCompoundObjects($page));
 
         // Register custom TWIG extension
         Event::listen('cms.extendTwig', function (Environment $twig) {
@@ -146,10 +138,16 @@ class Plugin extends PluginBase
             'cms.page.init',
             function (Controller $controller, string $url, ?CmsPage $page = null) {
                 \Closure::bind(
-                    function () {
+                    function () use ($controller) {
                         /** @var mixed $this */
                         if (str_ends_with($this->page->fileName, '.vue')) {
-                            $this->layout = VueLayout::createDefaultLayout();
+                            if (Request::header('X-Laika', '0') != '1') {
+                                $this->layout = VueLayout::createDefaultLayout();
+                            } else {
+                                $this->layout->markup = "<div></div>";
+                            }
+                        }
+                        if (str_ends_with($this->page->fileName, '.vue')) {
                             $this->page->content = '';
                         }
                     },
@@ -182,7 +180,7 @@ class Plugin extends PluginBase
         // Resolve .vue lookups
         Event::listen(
             'cms.pageLookup.resolveItem',
-            function (string $type, PageLookupItem $item, string $currentUrl, Theme $theme) {
+            function (string $type, PageLookupItem $item, string $currentUrl, CmsTheme $theme) {
                 if ($item->type !== 'cms-page' || !$item->reference) {
                     return null;
                 }
@@ -198,8 +196,8 @@ class Plugin extends PluginBase
 
                 if ($item->sites) {
                     $sites = [];
-                    if (Site::hasMultiSite()) {
-                        foreach (Site::listEnabled() as $site) {
+                    if (SiteManager::hasMultiSite()) {
+                        foreach (SiteManager::listEnabled() as $site) {
                             $sites[] = [
                                 'url' => Cms::siteUrl($page, $site),
                                 'id' => $site->id,
@@ -246,6 +244,7 @@ class Plugin extends PluginBase
         );
 
         // Add laika properties
+        $component->addDynamicProperty('__hasRunLifeCycle', false);
         $component->addDynamicProperty('__laikaSnapshot', null);
         $component->addDynamicProperty('__laikaProps', []);
 
@@ -269,6 +268,7 @@ class Plugin extends PluginBase
                 }
             }
             $component->__laikaProps = $diff;
+            $component->__hasRunLifeCycle = true;
         });
 
         // Get component-associated page variables
@@ -293,6 +293,7 @@ class Plugin extends PluginBase
             CmsCompoundObject::class
         );
 
+        // Allow .vue extension
         \Closure::bind(
             function () {
                 /** @var CmsCompoundObject $this */
@@ -304,88 +305,56 @@ class Plugin extends PluginBase
             CmsCompoundObject::class
         )->call($model);
 
-        // Extend Vue functionality
+        // Add isVue dynamic method
         $model->addDynamicMethod('isVue', function () use ($model) {
-            if (empty($model->attributes['fileName'])) {
-                throw new \Exception('tgh');
-            }
-            return str_ends_with($model->attributes['fileName'], '.vue');
+            return str_ends_with((string) ($model->attributes['fileName'] ?? ''), '.vue');
         });
 
-        // @todo Temporary Solution
+        // Add hydrateContent dynamic method
         $model->addDynamicMethod('hydrateContent', function () use ($model) {
-            $src = (string) ($model->attributes['content'] ?? '');
-
-            [$octoberIni, $withoutOctober] = SFC::extractTag($src, 'october');
-
-            $settings = [];
-            if ($octoberIni !== null && trim($octoberIni) !== '') {
-                $settings = Ini::parse($octoberIni);
-            }
-
-            $template = SFC::extractFirstTag($withoutOctober, 'template') ?? '';
-            $script = SFC::extractFirstScriptSetup($withoutOctober) ?? '';
-            $styles = SFC::extractAllTags($withoutOctober, 'style');
-
-            $model->attributes['_indent_template'] = Indent::detect($template);
-            $model->attributes['_indent_script'] = Indent::detect($script);
-            $model->attributes['_indent_style'] = Indent::detect(implode("\n\n", $styles));
-
-            $model->attributes['_october'] = $settings;
-            $model->attributes['markup'] = Indent::strip($template, $model->attributes['_indent_template']);
-            $model->attributes['setup'] = Indent::strip($script, $model->attributes['_indent_script']);
-            $model->attributes['style'] = Indent::strip(implode("\n\n", array_map('trim', $styles)), $model->attributes['_indent_style']);
+            $model->attributes = array_merge(
+                $model->attributes,
+                SFC::hydrate($model->attributes['content'] ?? '')
+            );
         });
 
-        // @todo Temporary Solution
+        // Add compileContent dynamic method
         $model->addDynamicMethod('compileContent', function () use ($model) {
-            $settings = $model->attributes['_october'] ?? [];
-            $markup = Indent::apply(($model->attributes['markup'] ?? ''), ($model->attributes['_indent_template'] ?? '    '));
-            $setup = Indent::apply(($model->attributes['setup'] ?? ''), ($model->attributes['_indent_script'] ?? ''));
-            $style = Indent::apply(($model->attributes['style'] ?? ''), ($model->attributes['_indent_style'] ?? ''));
-
-            $parts = [];
-
-            if (is_array($settings) && !empty($settings)) {
-                $ini = Ini::render($settings);
-                $parts[] = "<october>\n" . rtrim($ini) . "\n</october>";
-            }
-
-            if (trim($markup) !== '') {
-                $parts[] = "<template>\n" . rtrim($markup) . "\n</template>";
-            } else {
-                $parts[] = "<template>\n</template>";
-            }
-
-            if (trim($setup) !== '') {
-                $parts[] = "<script lang=\"ts\" setup>\n" . rtrim($setup) . "\n</script>";
-            } else {
-                $parts[] = "<script lang=\"ts\" setup>\n</script>";
-            }
-
-            if (trim($style) !== '') {
-                $parts[] = "<style>\n" . rtrim($style) . "\n</style>";
-            }
-
-            $model->attributes['content'] = implode("\n\n", $parts) . "\n";
+            $model->attributes['content'] = SFC::compile($model->attributes);
         });
 
-        // Load settings
+        // Load <october> settings after fetch
         $model->bindEvent('model.afterFetch', function () use ($model, $setVueExtension) {
-            if (!$model->methodExists('isVue') || !$model->isVue()) {
+            if (!str_ends_with((string) ($model->attributes['fileName'] ?? ''), '.vue')) {
                 return;
             }
-            $setVueExtension->call($model);
-            $model->hydrateContent();
 
+            // Set .vue as default extension
+            $setVueExtension->call($model);
+
+            // Hydrate content and set settings
+            $model->hydrateContent();
             $ini = $model->getAttribute('_october') ?? [];
             if (is_array($ini)) {
+                $components = [];
+
                 foreach ($ini as $key => $value) {
                     if ($key === 'settings') {
                         continue;
                     }
+
+                    // Fix to merge page.[resources] with layout.[resources]
+                    if ($key === 'resources' && is_array($value)) {
+                        $key .= ' ' . str_replace('.', '', (string) microtime(true));
+                    }
+
                     $model->setAttribute($key, $value);
+                    if (is_array($value)) {
+                        $components[$key] = $value;
+                    }
                 }
+
+                $model->settings['components'] = $components;
             }
         });
     }
