@@ -249,7 +249,7 @@ class ComponentsValue implements PayloadProvider
 
                 if ($component instanceof CollectionComponent) {
                     $relations = $component->property('relations', []);
-                    $paginate = (int) $component->property('paginate', 0);
+                    $paginate = $component->property('paginate', 0);
                     $model = $component->getPrimaryRecordQuery();
 
                     // Execute Where clauses
@@ -294,10 +294,16 @@ class ComponentsValue implements PayloadProvider
                     }
 
                     // Paginate / Select Items
-                    if ($paginate <= 0 || !is_numeric($paginate)) {
-                        $items = $model->get();
+                    if ($paginate === 'first') {
+                        $items = $model->first();
+                    } else if ($paginate === 'last') {
+                        $items = $model->last();
+                    } else if ($paginate === 'nested') {
+                        $items = $model->getNested();
+                    } else if (is_numeric($paginate) && $paginate > 0) {
+                        $items = $model->paginate((int) $paginate);
                     } else {
-                        $items = $model->paginate($paginate);
+                        $items = $model->get();
                     }
 
                     // Load Relationships
