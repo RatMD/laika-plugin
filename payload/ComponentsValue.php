@@ -5,6 +5,7 @@ namespace RatMD\Laika\Payload;
 use Cms\Classes\CmsCompoundObject;
 use Cms\Classes\ComponentBase;
 use Cms\Components\Resources;
+use Illuminate\Support\Facades\Request;
 use October\Rain\Support\Arr;
 use October\Rain\Support\Str;
 use RatMD\Laika\Contracts\PayloadProvider;
@@ -253,19 +254,41 @@ class ComponentsValue implements PayloadProvider
 
                     // Execute Where clauses
                     $clauses = $component->property('where', []);
+                    $params = $component->property('whereParams', []);
                     if (is_array($clauses)) {
-                        $params = $component->property('whereParams', []);
-
                         foreach ($clauses AS $clause) {
-                            $args = explode(',', $clause);
-                            $method = array_shift($args);
-                            $args = array_map(function ($val) use ($params) {
+                            $values = explode(',', $clause);
+                            $method = array_shift($values);
+
+                            $args = [];
+                            $inArray = false;
+
+                            array_walk($values, function ($val) use (&$args, &$inArray, &$params) {
                                 if (str_starts_with($val, '$')) {
-                                    return $params[substr($val, 1)] ?? null;
-                                } else {
-                                    return $val;
+                                    $key = substr($val, 1);
+                                    $val = $params[$key] = $params[$key] ?? Request::query($key, null);
                                 }
-                            }, $args);
+
+                                if (str_starts_with($val, '[')) {
+                                    $val = substr($val, 1);
+                                    $args[] = [];
+                                    $inArray = true;
+                                }
+                                if (str_ends_with($val, ']')) {
+                                    $val = substr($val, 0, -1);
+                                }
+
+                                if ($inArray) {
+                                    $args[count($args)-1][] = $val;
+                                } else {
+                                    $args[] = $val;
+                                }
+
+                                if (str_ends_with($val, ']')) {
+                                    $inArray = false;
+                                }
+                            });
+
                             $model->{$method}(...$args);
                         }
                     }
@@ -286,11 +309,18 @@ class ComponentsValue implements PayloadProvider
                     $alias = $component->property('as', 'items');
                     return [
                         $alias => $items->toArray(),
+                        ...($params ?? [])
                     ];
                 }
 
                 if ($component instanceof SectionComponent) {
                     $model = $component->getPrimaryRecordResult();
+
+                    $relations = $component->property('relations', []);
+                    if (!empty($relations)) {
+                        $model->load($relations);
+                    }
+
                     return $model->toArray();
                 }
 
