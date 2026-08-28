@@ -11,6 +11,7 @@ use RatMD\Laika\Objects\Component;
 use RatMD\Laika\Objects\Layout;
 use RatMD\Laika\Objects\Page;
 use RatMD\Laika\Objects\Resource;
+use RatMD\Laika\Objects\Type;
 
 trait HasExtensionCrud
 {
@@ -28,6 +29,7 @@ trait HasExtensionCrud
             EditorExtension::DOCUMENT_TYPE_LAYOUT       => Layout::class,
             EditorExtension::DOCUMENT_TYPE_PAGE         => Page::class,
             EditorExtension::DOCUMENT_TYPE_RESOURCE     => Resource::class,
+            EditorExtension::DOCUMENT_TYPE_TYPE         => Type::class,
         ];
 
         if (!array_key_exists($documentType, $types)) {
@@ -55,6 +57,7 @@ trait HasExtensionCrud
             EditorExtension::DOCUMENT_TYPE_LAYOUT       => 'Layout',
             EditorExtension::DOCUMENT_TYPE_PAGE         => 'Page',
             EditorExtension::DOCUMENT_TYPE_RESOURCE     => 'Resource',
+            EditorExtension::DOCUMENT_TYPE_TYPE         => 'Type',
         ];
 
         $documentType = $documentData['type'];

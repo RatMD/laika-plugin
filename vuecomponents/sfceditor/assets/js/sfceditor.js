@@ -1,21 +1,13 @@
-Vue.component('ratmd-laika-sfc-editor', {
-    /**
-     *
-     */
-    extends: oc.Modules.import('cms.editor.extension.documentcomponent.base'),
+import { CmsDocumentComponentBase } from '../../../../../../../modules/cms/assets/js/cms.editor.extension.documentcomponent.base.js';
+import EditorModelDefinition from '../../../../../../../modules/backend/vuecomponents/monacoeditor/assets/js/modeldefinition.js';
+
+export default {
+    extends: CmsDocumentComponentBase,
 
     /**
-     *
-     */
-    template: '#cms_vuecomponents_layouteditor',
-
-    /**
-     *
-     * @returns
+     * @returns 
      */
     data: function() {
-        const EditorModelDefinition = oc.Modules.import('backend.vuecomponents.monacoeditor.modeldefinition');
-
         const defMarkup = new EditorModelDefinition(
             'html',
             'Template',
@@ -27,7 +19,7 @@ Vue.component('ratmd-laika-sfc-editor', {
 
         const defSetup = new EditorModelDefinition(
             'typescript',
-            'Setup',
+            'Script',
             {},
             'setup',
             'backend-icon-background monaco-document seti-ts'
@@ -48,13 +40,16 @@ Vue.component('ratmd-laika-sfc-editor', {
             'PHP',
             {},
             'code',
-            'backend-icon-background monaco-document seti-php'
+            'backend-icon-background monaco-document php'
         );
         defPhp.setModelTags(['vue-php']);
 
         return {
             documentData: {
+                _october: {},
                 markup: '',
+                setup: '',
+                style: '',
                 code: '',
                 components: []
             },
@@ -139,7 +134,7 @@ Vue.component('ratmd-laika-sfc-editor', {
          * @returns
          */
         getRootProperties: function () {
-            return ['components', 'fileName', 'markup', 'setup', 'style', 'code'];
+            return ['_october', 'components', 'fileName', 'markup', 'setup', 'style', 'code'];
         },
 
         /**
@@ -147,7 +142,7 @@ Vue.component('ratmd-laika-sfc-editor', {
          * @returns
          */
         getMainUiDocumentProperties: function getMainUiDocumentProperties() {
-            return ['components', 'description', 'fileName', 'markup', 'setup', 'style', 'code'];
+            return ['_october', 'components', 'description', 'fileName', 'markup', 'setup', 'style', 'code'];
         },
 
         /**
@@ -164,6 +159,13 @@ Vue.component('ratmd-laika-sfc-editor', {
          * @param {*} data
          */
         documentLoaded: function documentLoaded(data) {
+            if (Array.isArray(this.documentData.components)) {
+                this.documentData.components = this.documentData.components.filter((component) => {
+                    const name = String(component.name || '').toLowerCase();
+                    return name !== '_october' && name !== 'resources';
+                });
+            }
+
             if (this.$refs.editor) {
                 this.$refs.editor.updateValue(this.defMarkup, this.documentData.markup);
                 this.$refs.editor.updateValue(this.defSetup, this.documentData.setup);
@@ -182,4 +184,4 @@ Vue.component('ratmd-laika-sfc-editor', {
             this.defPhp.setHolderObject(this.documentData);
         }
     },
-});
+};

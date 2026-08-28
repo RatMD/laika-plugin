@@ -36,8 +36,45 @@ class SFC
      */
     static public function extractFirstTag(string $src, string $tag): ?string
     {
-        $pattern = sprintf('/<%s\b[^>]*>(.*?)<\/%s>/si', preg_quote($tag, '/'), preg_quote($tag, '/'));
-        return preg_match($pattern, $src, $m) ? $m[1] : null;
+        $escapedTag = preg_quote($tag, '/');
+        $openingPattern = sprintf('/<%s\b[^>]*>/i', $escapedTag);
+
+        if (!preg_match($openingPattern, $src, $opening, PREG_OFFSET_CAPTURE)) {
+            return null;
+        }
+
+        $contentOffset = $opening[0][1] + strlen($opening[0][0]);
+        $tagPattern = sprintf('/<\/?%s\b[^>]*>/i', $escapedTag);
+
+        if (!preg_match_all(
+            $tagPattern,
+            $src,
+            $matches,
+            PREG_OFFSET_CAPTURE,
+            $contentOffset
+        )) {
+            return null;
+        }
+
+        $depth = 1;
+
+        foreach ($matches[0] as [$matchedTag, $tagOffset]) {
+            if (str_starts_with($matchedTag, '</')) {
+                $depth--;
+
+                if ($depth === 0) {
+                    return substr($src, $contentOffset, $tagOffset - $contentOffset);
+                }
+
+                continue;
+            }
+
+            if (!str_ends_with(rtrim($matchedTag), '/>')) {
+                $depth++;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -8,6 +8,8 @@ return [
         'menu' => [
             'components' => 'Components',
             'components_new' => 'Create Component',
+            'resources' => 'Resources',
+            'types' => 'Types',
         ]
     ]
 ];

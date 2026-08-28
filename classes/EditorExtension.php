@@ -2,21 +2,26 @@
 
 namespace RatMD\Laika\Classes;
 
+use ApplicationException;
 use Backend\Facades\BackendAuth;
-use Backend\VueComponents\DropdownMenu\ItemDefinition;
 use Backend\VueComponents\TreeView\SectionDefinition;
 use Backend\VueComponents\TreeView\SectionList;
+use Cms\Classes\CmsCompoundObject;
 use Cms\Classes\EditorExtension\HasComponentListLoader;
 use Cms\Classes\EditorExtension\HasExtensionCrud as CoreHasExtensionCrud;
+use Cms\Classes\Layout as CmsLayout;
+use Cms\Classes\Page as CmsPage;
+use Cms\Classes\Partial as CmsPartial;
 use Cms\Classes\Theme;
 use Editor\Classes\ExtensionBase;
-use Illuminate\Support\Facades\Lang;
+use Illuminate\Support\Facades\Artisan;
 use RatMD\Laika\Concerns\HasExtensionCrud as LaikaHasExtensionCrud;
 use RatMD\Laika\Concerns\HasExtensionAssetsState;
 use RatMD\Laika\Concerns\HasExtensionState;
 use RatMD\Laika\Concerns\HasExtensionThemesState;
 use RatMD\Laika\Objects\Asset;
 use RatMD\Laika\VueComponents\SFCEditor;
+use Symfony\Component\Process\Process;
 
 class EditorExtension extends ExtensionBase
 {
@@ -62,10 +67,39 @@ class EditorExtension extends ExtensionBase
     const DOCUMENT_TYPE_RESOURCE = 'laika-resource';
 
     /**
+     * <theme>/types/*
+     * @var string
+     */
+    const DOCUMENT_TYPE_TYPE = 'laika-type';
+
+    /**
      *
      * @var ?Theme
      */
     protected ?Theme $cachedTheme = null;
+
+    /**
+     * Ensures native CMS scanners include both October and Vue templates before
+     * the Editor builds its navigator state.
+     */
+    public function __construct()
+    {
+        foreach ([CmsPage::class, CmsLayout::class, CmsPartial::class] as $modelClass) {
+            $modelClass::extend(function (CmsCompoundObject $model): void {
+                \Closure::bind(
+                    function (): void {
+                        /** @var CmsCompoundObject $this */
+                        $this->allowedExtensions = array_values(array_unique(array_merge(
+                            $this->allowedExtensions,
+                            ['htm', 'vue']
+                        )));
+                    },
+                    $model,
+                    CmsCompoundObject::class
+                )->call($model);
+            });
+        }
+    }
 
     /**
      * Returns unique extension namespace
@@ -91,9 +125,11 @@ class EditorExtension extends ExtensionBase
      */
     public function listJsFiles(): array
     {
+        $modulePath = __DIR__ . '/../assets/js/editor.extension.ratmd.laika.main.js';
+        $moduleVersion = is_file($modulePath) ? (string) filemtime($modulePath) : '1';
+
         return [
-            '/plugins/ratmd/laika/assets/js/editor.extension.ratmd.laika.main.js',
-            '/plugins/ratmd/laika/assets/js/extension.document_controller.component.js',
+            '/plugins/ratmd/laika/assets/js/editor.extension.ratmd.laika.main.js?v=' . $moduleVersion,
         ];
     }
 
@@ -116,84 +152,7 @@ class EditorExtension extends ExtensionBase
      */
     public function listNavigatorSections(SectionList $sectionList, $documentType = null)
     {
-        $editTheme = $this->getTheme();
-
-        // Section Title
-        $sectionTitle = 'CMS - Vue Editor';
-        $cmsSection = $sectionList->addSection($sectionTitle, 'cms');
-
-        if (!$editTheme) {
-            return;
-        }
-
-        $this->addSectionMenuItems($cmsSection);
-
-        $this->addAssetsNavigatorNodes($this->getTheme(), $cmsSection);
-        $this->addComponentsNavigatorNodes($this->getTheme(), $cmsSection);
-        $this->addLayoutsNavigatorNodes($this->getTheme(), $cmsSection);
-        $this->addPagesNavigatorNodes($this->getTheme(), $cmsSection);
-        $this->addResourcesNavigatorNodes($this->getTheme(), $cmsSection);
-    }
-
-    /**
-     *
-     * @param SectionDefinition $section
-     * @return void
-     */
-    private function addSectionMenuItems(SectionDefinition $section)
-    {
-        $user = BackendAuth::getUser();
-
-        $section->addMenuItem(
-            ItemDefinition::TYPE_TEXT,
-            Lang::get('cms::lang.editor.refresh'),
-            'ratmd.laika:refresh-navigator'
-        )->setIcon('icon-refresh');
-
-        $createMenuItem = new ItemDefinition(ItemDefinition::TYPE_TEXT, Lang::get('cms::lang.editor.create'), 'cms:create');
-        $createMenuItem->setIcon('icon-create');
-        $menuConfiguration = [
-            'laika.cms_assets'      => [
-                'label'     => 'Assets',
-                'document'  => EditorExtension::DOCUMENT_TYPE_ASSET
-            ],
-            'laika.cms_components'  => [
-                'label'     => 'Vue Components',
-                'document'  => EditorExtension::DOCUMENT_TYPE_COMPONENT
-            ],
-            'laika.cms_layouts'     => [
-                'label'     => 'Vue Layouts',
-                'document'  => EditorExtension::DOCUMENT_TYPE_LAYOUT
-            ],
-            'laika.cms_pages'       => [
-                'label'     => 'Vue Pages',
-                'document'  => EditorExtension::DOCUMENT_TYPE_PAGE
-            ],
-            'laika.cms_resources'   => [
-                'label'     => 'Resources',
-                'document'  => EditorExtension::DOCUMENT_TYPE_RESOURCE
-            ],
-        ];
-
-        foreach ($menuConfiguration as $permission => $itemConfig) {
-            if (!$user->hasAnyAccess([$permission])) {
-                continue;
-            }
-
-            $createMenuItem->addItemObject(
-                $section->addCreateMenuItem(
-                    ItemDefinition::TYPE_TEXT,
-                    Lang::get($itemConfig['label']),
-                    'ratmd.laika:create-document@'.$itemConfig['document']
-                )
-            );
-        }
-
-        if ($createMenuItem->hasItems()) {
-            $section->addMenuItemObject($createMenuItem);
-        }
-
-        $this->createCmsSectionThemeMenuItems($section);
+        // Laika contributes nodes to October's native CMS section through customData.
     }
 
     /**
@@ -231,6 +190,101 @@ class EditorExtension extends ExtensionBase
     }
 
     /**
+     * Clears the application cache for an authorized backend superuser.
+     * @return array{message: string, output: string}
+     * @throws ApplicationException 
+     */
+    protected function command_onClearCache(): array
+    {
+        $this->assertCanRunTemplateActions();
+
+        $exitCode = Artisan::call('cache:clear');
+        $output = $this->trimCommandOutput(Artisan::output());
+
+        if ($exitCode !== 0) {
+            throw new ApplicationException($output ?: 'The application cache could not be cleared.');
+        }
+
+        return [
+            'message' => 'Application cache cleared.',
+            'output' => $output,
+        ];
+    }
+
+    /**
+     * Builds the selected theme assets for an authorized backend superuser.
+     * @return array{message: string, output: string}
+     * @throws ApplicationException 
+     */
+    protected function command_onBuildAssets(): array
+    {
+        $this->assertCanRunTemplateActions();
+
+        $theme = $this->getTheme();
+        if (!$theme) {
+            throw new ApplicationException('No editable theme is available.');
+        }
+
+        $themePath = $theme->getPath();
+        if (!is_file($themePath . '/package.json')) {
+            throw new ApplicationException('The selected theme does not contain a package.json file.');
+        }
+
+        $npmExecutable = PHP_OS_FAMILY === 'Windows' ? 'npm.cmd' : 'npm';
+        $process = new Process([$npmExecutable, 'run', 'build'], $themePath);
+        $process->setTimeout(600);
+
+        try {
+            $process->run();
+        } catch (\Throwable $exception) {
+            throw new ApplicationException(
+                'The theme asset build could not be started: ' . $exception->getMessage()
+            );
+        }
+
+        $output = $this->trimCommandOutput(
+            trim($process->getOutput() . "\n" . $process->getErrorOutput())
+        );
+
+        if (!$process->isSuccessful()) {
+            throw new ApplicationException($output ?: 'The theme asset build failed.');
+        }
+
+        return [
+            'message' => 'Theme assets built successfully.',
+            'output' => $output,
+        ];
+    }
+
+    /**
+     * Ensures template maintenance actions are restricted to backend superusers.
+     * @return void 
+     * @throws ApplicationException 
+     */
+    private function assertCanRunTemplateActions(): void
+    {
+        $user = BackendAuth::getUser();
+
+        if (!$user || !$user->isSuperUser()) {
+            throw new ApplicationException('You are not authorized to run template maintenance actions.');
+        }
+    }
+
+    /**
+     * Limits command output returned to the browser.
+     * @param string $output 
+     * @return string 
+     */
+    private function trimCommandOutput(string $output): string
+    {
+        $output = trim($output);
+
+        return strlen($output) > 12000
+            ? '…' . substr($output, -12000)
+            : $output;
+    }
+
+    /**
      * Returns custom state data required for the extension client-side controller
      * @return array
      */
@@ -240,11 +294,14 @@ class EditorExtension extends ExtensionBase
         $theme = $this->getTheme();
 
         return [
+            'canRunTemplateActions'          => $user?->isSuperUser() ?? false,
+            'cmsNavigatorNodes'              => $theme ? $this->makeCmsNavigatorNodes($theme) : [],
             'assets'                        => $this->loadAssetsForUiLists($theme, $user),
             'components'                    => $this->loadComponentsForUiLists($theme, $user),
             'layouts'                       => $this->loadLayoutsForUiLists($theme, $user),
             'pages'                         => $this->loadPagesForUiLists($theme, $user),
             'resources'                     => $this->loadResourcesForUiLists($theme, $user),
+            'types'                         => $this->loadTypesForUiLists($theme, $user),
 
             //@todo temporary, replace with laika/cms-related permissions
             'canManagePages'                => true ?? $user->hasAnyAccess(['editor.cms_pages']),
@@ -262,6 +319,22 @@ class EditorExtension extends ExtensionBase
             'theme'                         => $theme ? $theme->getDirName() : null,
             'customToolbarSettingsButtons'  => []
         ];
+    }
+
+    /**
+     * Builds Laika nodes that are merged into October's native CMS section.
+     * @param Theme $theme 
+     * @return array<int, array<string, mixed>>
+     */
+    private function makeCmsNavigatorNodes(Theme $theme): array
+    {
+        $section = new SectionDefinition('Laika', 'laika');
+        $section->setChildKeyPrefix($this->getNamespace() . ':');
+
+        $this->addResourcesNavigatorNodes($theme, $section);
+        $this->addTypesNavigatorNodes($theme, $section);
+
+        return $section->toArray()['nodes'];
     }
 
     /**

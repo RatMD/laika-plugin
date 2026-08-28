@@ -1,3 +1,10 @@
 <?php declare(strict_types=1);
 
-return [];
+return [
+    'editor' => [
+        'menu' => [
+            'resources' => 'Ressourcen',
+            'types' => 'Typen',
+        ],
+    ],
+];

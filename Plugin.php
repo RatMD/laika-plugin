@@ -15,6 +15,7 @@ use Cms\Classes\Partial as CmsPartial;
 use Cms\Classes\Theme as CmsTheme;
 use Cms\Models\PageLookupItem;
 use Illuminate\Foundation\Vite;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Request;
 use October\Rain\Support\Facades\Event;
 use October\Rain\Support\Str;
@@ -73,6 +74,15 @@ class Plugin extends PluginBase
      */
     public function register()
     {
+        $editableAssetTypes = (array) Config::get(
+            'cms.editable_asset_types',
+            ['css', 'js', 'less', 'sass', 'scss']
+        );
+        Config::set('cms.editable_asset_types', array_values(array_unique(array_merge(
+            $editableAssetTypes,
+            ['htm', 'json', 'jsx', 'ts', 'tsx', 'vue']
+        ))));
+
         $this->app->singleton(ContextResolver::class);
         $this->app->bind(Context::class, function ($app) {
             return $this->app->make(ContextResolver::class)->get();
@@ -91,7 +101,7 @@ class Plugin extends PluginBase
 
             $vite = new Vite;
             $vite->useManifestFilename(".vite/manifest.json");
-            $vite->useBuildDirectory("themes/{$dirName}/assets");
+            $vite->useBuildDirectory("themes/{$dirName}/assets/build");
             $vite->useHotFile(themes_path("{$dirName}/assets/.hot"));
             return $vite;
         });
@@ -128,6 +138,7 @@ class Plugin extends PluginBase
         ComponentBase::extend(fn (ComponentBase $component) => $this->extendComponentBase($component));
         CmsLayout::extend(fn (CmsLayout $layout) => $this->extendCmsCompoundObjects($layout));
         CmsPage::extend(fn (CmsPage $page) => $this->extendCmsCompoundObjects($page));
+        CmsPartial::extend(fn (CmsPartial $partial) => $this->extendCmsCompoundObjects($partial));
 
         // Register custom TWIG extension
         Event::listen('cms.extendTwig', function (Environment $twig) {
@@ -346,6 +357,31 @@ class Plugin extends PluginBase
             CmsCompoundObject::class
         );
 
+        $setSingleSection = \Closure::bind(
+            function () {
+                /** @var CmsCompoundObject $this */
+                $this->isCompoundObject = false;
+            },
+            $model,
+            CmsCompoundObject::class
+        );
+
+        $model->addFillable([
+            '_october',
+            'setup',
+            'style',
+        ]);
+        $model->addPurgeable([
+            '_indent_php',
+            '_indent_script',
+            '_indent_style',
+            '_indent_template',
+            '_october',
+            'resources',
+            'setup',
+            'style',
+        ]);
+
         // Allow .vue extension
         \Closure::bind(
             function () {
@@ -398,8 +434,6 @@ class Plugin extends PluginBase
 
                     // Fix to merge page.[resources] with layout.[resources]
                     if ($key === 'resources' && is_array($value)) {
-                        $key .= ' ' . str_replace('.', '', (string) microtime(true));
-
                         if (array_key_exists('css', $value)) {
                             $value['_css'] = $value['css'];
                             unset($value['css']);
@@ -409,6 +443,9 @@ class Plugin extends PluginBase
                             $value['_js'] = $value['js'];
                             unset($value['js']);
                         }
+
+                        $model->setAttribute($key, $value);
+                        continue;
                     }
 
                     $model->setAttribute($key, $value);
@@ -419,6 +456,41 @@ class Plugin extends PluginBase
 
                 $model->settings['components'] = $components;
             }
+        });
+
+        // Compile Vue editor fields back to a single-file component before persistence.
+        $model->bindEvent('model.beforeSave', function () use ($model, $setSingleSection) {
+            if (!$model->isVue()) {
+                return;
+            }
+
+            $documentData = request()->input('documentData', []);
+            if (!is_array($documentData)) {
+                $documentData = [];
+            }
+
+            foreach (['setup', 'style'] as $field) {
+                if (array_key_exists($field, $documentData)) {
+                    $model->setAttribute($field, (string) $documentData[$field]);
+                }
+            }
+
+            $october = $documentData['_october'] ?? $model->getAttribute('_october') ?? [];
+            if (!is_array($october)) {
+                $october = [];
+            }
+
+            if (array_key_exists('components', $documentData)) {
+                foreach ($october as $key => $value) {
+                    if ($key !== 'resources' && is_array($value)) {
+                        unset($october[$key]);
+                    }
+                }
+            }
+
+            $model->setAttribute('_october', array_replace($october, $model->getSettingsAttribute()));
+            $model->compileContent();
+            $setSingleSection->call($model);
         });
     }
 
