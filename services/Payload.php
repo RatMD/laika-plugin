@@ -47,6 +47,11 @@ class Payload implements Arrayable
             /** @var PayloadProvider $entry */
             $entry = app($class);
 
+            // Explicit partial reloads only include requested root keys.
+            if (!$full && !empty($keys) && !array_key_exists($key, $keys)) {
+                continue;
+            }
+
             // Skippable Keys
             if ($entry->getMode() === PayloadMode::ONCE && !$context->isRequired($key)) {
                 continue;

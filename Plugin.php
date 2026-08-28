@@ -11,6 +11,7 @@ use Cms\Classes\ComponentBase;
 use Cms\Classes\Controller;
 use Cms\Classes\Layout as CmsLayout;
 use Cms\Classes\Page as CmsPage;
+use Cms\Classes\Partial as CmsPartial;
 use Cms\Classes\Theme as CmsTheme;
 use Cms\Models\PageLookupItem;
 use Illuminate\Foundation\Vite;
@@ -133,10 +134,41 @@ class Plugin extends PluginBase
             $twig->addExtension(new Extension);
         });
 
+        // Provide a context-aware partial/content renderer for Vue pages.
+        Event::listen('cms.ajax.beforeRunHandler', function (Controller $controller, string $handler) {
+            if ($handler === 'onLaikaRenderPartial') {
+                $name = trim((string) request()->input('name', ''));
+                abort_unless(CmsPartial::validateRequestName($name), 422, 'Invalid partial name.');
+
+                $parameters = request()->input('parameters', []);
+                abort_unless(is_array($parameters), 422, 'Invalid partial parameters.');
+
+                return ajax()->data([
+                    'html' => $controller->renderPartial($name, $parameters),
+                ]);
+            }
+
+            if ($handler === 'onLaikaRenderContent') {
+                $name = trim((string) request()->input('name', ''));
+                abort_if($name === '' || str_contains($name, '..'), 422, 'Invalid content name.');
+
+                $parameters = request()->input('parameters', []);
+                abort_unless(is_array($parameters), 422, 'Invalid content parameters.');
+
+                return ajax()->data([
+                    'html' => $controller->renderContent($name, $parameters),
+                ]);
+            }
+
+            return null;
+        });
+
         // Inject static Vue Layout
         Event::listen(
             'cms.page.init',
             function (Controller $controller, string $url, ?CmsPage $page = null) {
+                app(ContextResolver::class)->set(Context::createFromController($controller, $page));
+
                 \Closure::bind(
                     function () use ($controller) {
                         /** @var mixed $this */
@@ -268,6 +300,27 @@ class Plugin extends PluginBase
                 }
             }
             $component->__laikaProps = $diff;
+            $component->__hasRunLifeCycle = true;
+        });
+
+        // Refresh component properties changed by an October AJAX handler.
+        $component->bindEvent('component.beforeRunAjaxHandler', function () use ($accessor, $component) {
+            $pageObject = $accessor->call($component);
+            $component->__laikaSnapshot = $pageObject?->vars ?? [];
+        });
+        $component->bindEvent('component.runAjaxHandler', function () use ($accessor, $component) {
+            $pageObject = $accessor->call($component);
+
+            $before = (array) ($component->__laikaSnapshot ?? []);
+            $after = (array) ($pageObject?->vars ?? []);
+            $diff = [];
+            foreach ($after as $key => $val) {
+                if (!array_key_exists($key, $before) || $before[$key] !== $val) {
+                    $diff[$key] = $val;
+                }
+            }
+
+            $component->__laikaProps = array_merge((array) $component->__laikaProps, $diff);
             $component->__hasRunLifeCycle = true;
         });
 

@@ -30,8 +30,12 @@ class Shared implements PartialArrayable
     public function toArray(?array $only = null): array
     {
         $result = [];
+        $context = app(Context::class);
 
         foreach ($this->entries as $key => $entry) {
+            if ($entry->mode === PayloadMode::ONCE && $context->isPartialRequest()) {
+                continue;
+            }
             if ($only && !$this->pathRequested($key, $only)) {
                 continue;
             }
@@ -177,7 +181,7 @@ class Shared implements PartialArrayable
             key: $key,
             resolver: $value,
             mode: PayloadMode::ALWAYS,
-            condition: $condition
+            condition: fn (): bool => !(bool) app()->call($condition)
         ));
     }
 

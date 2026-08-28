@@ -75,6 +75,7 @@ class SFC
     static public function hydrate(string $content): array
     {
         [$octoberIni, $withoutOctober] = SFC::extractTag($content, 'october');
+        [$php, $withoutServerBlocks] = SFC::extractTag($withoutOctober, 'php');
 
         // <october> settings
         $settings = [];
@@ -83,20 +84,22 @@ class SFC
         }
 
         // extract tags
-        $template = SFC::extractFirstTag($withoutOctober, 'template') ?? '';
-        $script = SFC::extractFirstScriptSetup($withoutOctober) ?? '';
-        $styles = SFC::extractAllTags($withoutOctober, 'style');
+        $template = SFC::extractFirstTag($withoutServerBlocks, 'template') ?? '';
+        $script = SFC::extractFirstScriptSetup($withoutServerBlocks) ?? '';
+        $styles = SFC::extractAllTags($withoutServerBlocks, 'style');
 
         // build result
         $result = [
             '_indent_template'  => Indent::detect($template),
             '_indent_script'    => Indent::detect($script),
             '_indent_style'     => Indent::detect(implode("\n\n", $styles)),
+            '_indent_php'       => Indent::detect($php ?? ''),
             '_october'          => $settings,
         ];
         $result['markup'] = Indent::strip($template, $result['_indent_template']);
         $result['setup'] = Indent::strip($script, $result['_indent_script']);
         $result['style'] = Indent::strip(implode("\n\n", array_map('trim', $styles)), $result['_indent_style']);
+        $result['code'] = Indent::strip($php ?? '', $result['_indent_php']);
         return $result;
     }
 
@@ -111,6 +114,7 @@ class SFC
         $markup = Indent::apply(($result['markup'] ?? ''), ($result['_indent_template'] ?? '    '));
         $setup = Indent::apply(($result['setup'] ?? ''), ($result['_indent_script'] ?? ''));
         $style = Indent::apply(($result['style'] ?? ''), ($result['_indent_style'] ?? ''));
+        $php = Indent::apply(($result['code'] ?? ''), ($result['_indent_php'] ?? ''));
 
         $parts = [];
 
@@ -118,6 +122,11 @@ class SFC
         if (is_array($settings) && !empty($settings)) {
             $ini = Ini::render($settings);
             $parts[] = "<october>\n" . rtrim($ini) . "\n</october>";
+        }
+
+        // <php> server-side October page/layout code
+        if (trim($php) !== '') {
+            $parts[] = "<php>\n" . rtrim($php) . "\n</php>";
         }
 
         // <template> markup

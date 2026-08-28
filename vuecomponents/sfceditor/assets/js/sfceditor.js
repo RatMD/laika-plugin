@@ -43,6 +43,15 @@ Vue.component('ratmd-laika-sfc-editor', {
         );
         defStyle.setModelTags(['vue-style']);
 
+        const defPhp = new EditorModelDefinition(
+            'php',
+            'PHP',
+            {},
+            'code',
+            'backend-icon-background monaco-document seti-php'
+        );
+        defPhp.setModelTags(['vue-php']);
+
         return {
             documentData: {
                 markup: '',
@@ -51,10 +60,11 @@ Vue.component('ratmd-laika-sfc-editor', {
             },
             documentSettingsPopupTitle: this.trans('cms::lang.editor.layout'),
             documentTitleProperty: 'fileName',
-            codeEditorModelDefinitions: [defMarkup, defSetup, defStyle],
+            codeEditorModelDefinitions: [defMarkup, defSetup, defStyle, defPhp],
             defMarkup,
             defSetup,
-            defStyle
+            defStyle,
+            defPhp
         };
     },
 
@@ -129,7 +139,7 @@ Vue.component('ratmd-laika-sfc-editor', {
          * @returns
          */
         getRootProperties: function () {
-            return ['components', 'fileName', 'markup', 'setup', 'style'];
+            return ['components', 'fileName', 'markup', 'setup', 'style', 'code'];
         },
 
         /**
@@ -137,7 +147,7 @@ Vue.component('ratmd-laika-sfc-editor', {
          * @returns
          */
         getMainUiDocumentProperties: function getMainUiDocumentProperties() {
-            return ['components', 'description', 'fileName', 'markup', 'setup', 'style'];
+            return ['components', 'description', 'fileName', 'markup', 'setup', 'style', 'code'];
         },
 
         /**
@@ -158,6 +168,7 @@ Vue.component('ratmd-laika-sfc-editor', {
                 this.$refs.editor.updateValue(this.defMarkup, this.documentData.markup);
                 this.$refs.editor.updateValue(this.defSetup, this.documentData.setup);
                 this.$refs.editor.updateValue(this.defStyle, this.documentData.style);
+                this.$refs.editor.updateValue(this.defPhp, this.documentData.code);
             }
         },
 
@@ -168,6 +179,7 @@ Vue.component('ratmd-laika-sfc-editor', {
             this.defMarkup.setHolderObject(this.documentData);
             this.defSetup.setHolderObject(this.documentData);
             this.defStyle.setHolderObject(this.documentData);
+            this.defPhp.setHolderObject(this.documentData);
         }
     },
 });

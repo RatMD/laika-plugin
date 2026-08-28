@@ -123,6 +123,8 @@ class ComponentsValue implements PayloadProvider
 
             if ($rest === 'props' && $leaf) {
                 $aliases[$alias]['props'][] = $leaf;
+            } elseif ($rest === 'html') {
+                $aliases[$alias]['html'] = true;
             }
         }
 
@@ -150,6 +152,10 @@ class ComponentsValue implements PayloadProvider
 
             if (!empty($props)) {
                 $out[$alias] = ['props' => $props];
+            }
+            if (!empty($spec['html'])) {
+                $out[$alias] ??= [];
+                $out[$alias]['html'] = $this->renderComponent($alias);
             }
         }
 
@@ -207,7 +213,23 @@ class ComponentsValue implements PayloadProvider
             'props'     => $props,
             'methods'   => PHP::getDirectPublicClassMethods($object::class),
             'vars'      => PHP::getDirectPublicClassVars($object::class),
+            'html'      => $this->renderComponent($alias),
         ];
+    }
+
+    /**
+     * Render a component using October's native component renderer.
+     * @param string $alias
+     * @return string
+     */
+    protected function renderComponent(string $alias): string
+    {
+        try {
+            return (string) ($this->context->controller?->renderComponent($alias) ?? '');
+        } catch (\Throwable $exception) {
+            report($exception);
+            return '';
+        }
     }
 
     /**
@@ -327,7 +349,7 @@ class ComponentsValue implements PayloadProvider
                         $model->load($relations);
                     }
 
-                    return $model->toArray();
+                    return (array) $this->normalizeTailorValue($model);
                 }
 
                 if ($component instanceof GlobalComponent) {
@@ -387,9 +409,16 @@ class ComponentsValue implements PayloadProvider
     protected function applyEagerProps(object $object, array &$props): void
     {
         $eagers = [];
+        $source = $object;
+
         try {
             if ($object instanceof \Tailor\Classes\ComponentVariable) {
-                $eagers = $object->getComponent()->property('eager');
+                $component = $object->getComponent();
+                $eagers = $component->property('eager');
+
+                if ($component instanceof SectionComponent) {
+                    $source = $component->getPrimaryRecordResult();
+                }
             } else {
                 $eagers = method_exists($object, 'property') ? ($object->property('eager') ?? []) : [];
             }
@@ -407,29 +436,112 @@ class ComponentsValue implements PayloadProvider
                 [$eager, $filter] = explode('.', $eager);
             }
 
-            if (method_exists($object, $eager)) {
+            if (method_exists($source, $eager)) {
                 try {
-                    $props[$eager] = $object->{$eager}();
+                    $value = $source->{$eager}();
                     if (!empty($filter)) {
-                        $props[$eager] = $props[$eager]->{$filter}();
+                        $value = $value->{$filter}();
                     }
+                    $props[$eager] = $this->normalizeTailorValue($value);
                 } catch (\Throwable $exc) {
                     $props[$eager] = null;
                 }
                 continue;
             }
 
-            if ($object instanceof \Tailor\Classes\ComponentVariable || property_exists($object, $eager)) {
+            if (
+                $source instanceof \Illuminate\Database\Eloquent\Model
+                || property_exists($source, $eager)
+            ) {
                 try {
-                    $props[$eager] = $object->{$eager};
+                    $value = $source->{$eager};
                     if (!empty($filter)) {
-                        $props[$eager] = $props[$eager]->{$filter}();
+                        $value = $value->{$filter}();
                     }
+                    $props[$eager] = $this->normalizeTailorValue($value);
                 } catch (\Throwable $exc) {
                     $props[$eager] = null;
                 }
             }
         }
+    }
+
+    /**
+     * Normalize Tailor records while preserving dynamic fieldset values.
+     * Tailor stores nested-form values behind model accessors that are not
+     * included by the default Eloquent toArray() implementation.
+     * @param mixed $value
+     * @return mixed
+     */
+    protected function normalizeTailorValue(mixed $value): mixed
+    {
+        if ($value instanceof \Illuminate\Support\Collection) {
+            return $value
+                ->map(fn (mixed $item): mixed => $this->normalizeTailorValue($item))
+                ->all();
+        }
+
+        if (is_array($value)) {
+            return array_map(
+                fn (mixed $item): mixed => $this->normalizeTailorValue($item),
+                $value,
+            );
+        }
+
+        if (!is_object($value)) {
+            return $value;
+        }
+
+        $hasFieldset = method_exists($value, 'getFieldsetColumnNames');
+        $isRepeaterItem = $value instanceof \Tailor\Models\RepeaterItem;
+
+        if (!$hasFieldset && !$isRepeaterItem) {
+            return $value;
+        }
+
+        $result = method_exists($value, 'toArray') ? $value->toArray() : [];
+
+        if ($hasFieldset) {
+            foreach ((array) $value->getFieldsetColumnNames() as $field) {
+                if (!is_string($field) || $field === '') {
+                    continue;
+                }
+
+                try {
+                    $result[$field] = $this->normalizeTailorValue($value->{$field});
+                } catch (\Throwable $exception) {
+                    $result[$field] = null;
+                }
+            }
+        }
+
+        if ($isRepeaterItem) {
+            $skipRelations = ['host', 'parent', 'children'];
+            $relationTypes = [
+                'hasOne',
+                'hasMany',
+                'belongsTo',
+                'belongsToMany',
+                'attachOne',
+                'attachMany',
+            ];
+
+            foreach ($relationTypes as $relationType) {
+                foreach (array_keys((array) ($value->{$relationType} ?? [])) as $relation) {
+                    if (!is_string($relation) || in_array($relation, $skipRelations, true)) {
+                        continue;
+                    }
+
+                    try {
+                        $result[$relation] = $this->normalizeTailorValue($value->{$relation});
+                    } catch (\Throwable $exception) {
+                        $result[$relation] = null;
+                    }
+                }
+            }
+        }
+
+        return $result;
     }
 
     /**

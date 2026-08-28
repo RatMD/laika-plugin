@@ -130,7 +130,7 @@ class PageValue implements PayloadProvider
         }
 
         // Page Placeholders
-        if (empty($only) || in_array('content', $only)) {
+        if (empty($only) || in_array('placeholders', $only)) {
             $result['placeholders'] = $this->placeholders->toArray();
         }
 
@@ -165,7 +165,12 @@ class PageValue implements PayloadProvider
      */
     protected function collectProperties(): array
     {
-        return [];
+        $pageObject = $this->context->controller?->getPageObject();
+        if (!$pageObject) {
+            return [];
+        }
+
+        return (array) ($pageObject->vars ?? []);
     }
 
     /**

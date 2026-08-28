@@ -3,6 +3,9 @@
 namespace RatMD\Laika\Http\Middleware;
 
 use Illuminate\Http\Request;
+use RatMD\Laika\Services\ContextResolver;
+use RatMD\Laika\Services\Payload;
+use Symfony\Component\HttpFoundation\Response;
 
 class LaikaTokenMiddleware
 {
@@ -14,10 +17,10 @@ class LaikaTokenMiddleware
      */
     public function handle(Request $request, \Closure $next)
     {
-        $laikaRequest = $request->header('X-Laika', '0');
+        $isLaikaRequest = $request->header('X-Laika', '0') === '1';
         $debug = app()->hasDebugModeEnabled();
 
-        if ($laikaRequest === '1') {
+        if ($isLaikaRequest) {
             $token = (string) $request->header('X-Laika-Token', '');
             abort_if(empty($token), 401, $debug ? 'X-Laika-Token is missing' : '');
 
@@ -40,6 +43,38 @@ class LaikaTokenMiddleware
             );
         }
 
-        return $next($request);
+        /** @var Response $response */
+        $response = $next($request);
+
+        $isAjaxResponse = $response instanceof Response && $response->headers->has('X-AJAX-RESPONSE');
+        if ($isLaikaRequest && $isAjaxResponse && app(ContextResolver::class)->has()) {
+            $this->appendLaikaPayload($response);
+        }
+
+        return $response;
+    }
+
+    /**
+     * Append the post-handler LAIKA state to an October AJAX response.
+     * @param Response $response
+     * @return void
+     */
+    protected function appendLaikaPayload(Response $response): void
+    {
+        try {
+            $content = json_decode((string) $response->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+            if (!is_array($content)) {
+                return;
+            }
+
+            $content['__laika'] = app(Payload::class)->toArray();
+            $response->setContent(json_encode(
+                $content,
+                \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE
+            ));
+            $response->headers->remove('Content-Length');
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 }
