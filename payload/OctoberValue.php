@@ -6,7 +6,6 @@ use Config;
 use Lang;
 use Url;
 use Cms\Classes\Page;
-use Illuminate\Support\Facades\Request;
 use October\Rain\Support\Str;
 use RatMD\Laika\Contracts\PayloadProvider;
 use RatMD\Laika\Enums\PayloadMode;
@@ -50,10 +49,10 @@ class OctoberValue implements PayloadProvider
         $mediaUrl = (string) Config::get('filesystems.disks.media.url', '/storage/app/media');
         $mediaBaseUrl = $baseUrl . rtrim($mediaUrl, '/');
 
-        // Current route params
+        // Current CMS page params
         $currentParams = [];
         try {
-            $routeParams = Request::route()?->parameters() ?: [];
+            $routeParams = $this->context->controller?->getRouter()?->getParameters() ?: [];
             foreach ($routeParams as $key => $val) {
                 if (is_scalar($val) || $val === null) {
                     $currentParams[$key] = (string) $val;

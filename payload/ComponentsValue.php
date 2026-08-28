@@ -366,6 +366,7 @@ class ComponentsValue implements PayloadProvider
             $vars = $object->methodExists('getPageVars') ? ($object->getPageVars() ?? []) : [];
             return is_array($vars) ? $vars : (array) $vars;
         } catch (\Throwable $exc) {
+            report($exc);
             return [];
         }
     }
@@ -423,6 +424,7 @@ class ComponentsValue implements PayloadProvider
                 $eagers = method_exists($object, 'property') ? ($object->property('eager') ?? []) : [];
             }
         } catch (\Throwable $exc) {
+            report($exc);
             $eagers = [];
         }
 
@@ -444,6 +446,7 @@ class ComponentsValue implements PayloadProvider
                     }
                     $props[$eager] = $this->normalizeTailorValue($value);
                 } catch (\Throwable $exc) {
+                    report($exc);
                     $props[$eager] = null;
                 }
                 continue;
@@ -460,6 +463,7 @@ class ComponentsValue implements PayloadProvider
                     }
                     $props[$eager] = $this->normalizeTailorValue($value);
                 } catch (\Throwable $exc) {
+                    report($exc);
                     $props[$eager] = null;
                 }
             }
@@ -510,6 +514,7 @@ class ComponentsValue implements PayloadProvider
                 try {
                     $result[$field] = $this->normalizeTailorValue($value->{$field});
                 } catch (\Throwable $exception) {
+                    report($exception);
                     $result[$field] = null;
                 }
             }
@@ -535,6 +540,7 @@ class ComponentsValue implements PayloadProvider
                     try {
                         $result[$relation] = $this->normalizeTailorValue($value->{$relation});
                     } catch (\Throwable $exception) {
+                        report($exception);
                         $result[$relation] = null;
                     }
                 }
@@ -559,6 +565,7 @@ class ComponentsValue implements PayloadProvider
             try {
                 return $object->{$propName}();
             } catch (\Throwable $exc) {
+                report($exc);
                 return null;
             }
         }
@@ -567,6 +574,7 @@ class ComponentsValue implements PayloadProvider
             try {
                 return $object->{$propName};
             } catch (\Throwable $exc) {
+                report($exc);
                 return null;
             }
         }
@@ -578,6 +586,7 @@ class ComponentsValue implements PayloadProvider
             }
             return Arr::get($vars, $propName);
         } catch (\Throwable $exc) {
+            report($exc);
             return null;
         }
     }
