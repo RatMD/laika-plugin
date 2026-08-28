@@ -240,6 +240,12 @@ class ComponentsValue implements PayloadProvider
      */
     protected function resolveComponentObject(string $alias, ComponentBase $component): object
     {
+        // Layout and page resources commonly share the same alias. Use the
+        // scoped component instance so both sets are applied in merge order.
+        if ($component instanceof Resources) {
+            return $component;
+        }
+
         $object = ($this->context->controller?->vars[$alias] ?? null) ?? $component;
         if (!is_object($object)) {
             return $component;

@@ -180,6 +180,33 @@ function installTemplateToolbar(extension, attempt = 0) {
 
 class LaikaCmsEditorExtension extends CmsEditorExtension {
     /**
+     * Aligns October's client-side filename validation with its
+     * case-insensitive server-side validator.
+     * @param {Array} settingsFields
+     * @param {string} documentType
+     * @returns {Array}
+     */
+    preprocessSettingsFields(settingsFields, documentType) {
+        const processedFields = super.preprocessSettingsFields(settingsFields, documentType);
+        const templateDocumentTypes = ['cms-page', 'cms-layout', 'cms-partial'];
+
+        if (!templateDocumentTypes.includes(documentType)) {
+            return processedFields;
+        }
+
+        processedFields.some((field) => {
+            if (field.property !== 'fileName' || !field.validation?.regex) {
+                return false;
+            }
+
+            field.validation.regex.pattern = '^[a-zA-Z0-9\\_\\-\\.\\/]+$';
+            return true;
+        });
+
+        return processedFields;
+    }
+
+    /**
      * @param {*} initialState 
      */
     setInitialState(initialState) {

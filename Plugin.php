@@ -377,7 +377,6 @@ class Plugin extends PluginBase
             '_indent_style',
             '_indent_template',
             '_october',
-            'resources',
             'setup',
             'style',
         ]);
@@ -445,6 +444,7 @@ class Plugin extends PluginBase
                         }
 
                         $model->setAttribute($key, $value);
+                        $components[$key] = $value;
                         continue;
                     }
 

@@ -4,6 +4,61 @@ import { DocumentControllerPage } from '../../../../../modules/cms/assets/js/cms
 import { DocumentControllerLayout } from '../../../../../modules/cms/assets/js/cms.editor.extension.documentcontroller.layout.js';
 import { DocumentControllerPartial } from '../../../../../modules/cms/assets/js/cms.editor.extension.documentcontroller.partial.js';
 
+const vueDocumentDefaultNames = {
+    'cms-page': 'NewPage.vue',
+    'cms-layout': 'new-layout.vue',
+    'cms-partial': 'new-partial.vue'
+};
+
+/**
+ * Opens a new CMS template using Laika's unified template editor.
+ * @param {*} controller
+ * @param {*} commandObj
+ * @param {*} payload
+ */
+function openNewTemplateDocument(controller, commandObj, payload) {
+    if (!commandObj.hasParameter) {
+        throw new Error(
+            `Invalid create-document command: ${commandObj.fullCommand}. The command parameter is missing.`
+        );
+    }
+
+    if (commandObj.parameter !== controller.documentType) {
+        return;
+    }
+
+    const documentKey = $.oc.domIdManager.generate(controller.documentType);
+    const documentData = $.oc.vueUtils.getCleanObject(
+        controller.parentExtension.getNewDocumentData(controller.documentType, commandObj)
+    );
+    const currentFileName = String(
+        documentData.document.fileName || vueDocumentDefaultNames[controller.documentType]
+    );
+
+    documentData.document.fileName = currentFileName.replace(/\.[^/.]+$/, '') + '.vue';
+    documentData.label = documentData.document.fileName;
+
+    if (controller.documentType === 'cms-page' && !documentData.document.url) {
+        documentData.document.url = '/new-page';
+    }
+
+    controller.onBeforeDocumentCreated(commandObj, payload, documentData);
+
+    $.oc.editor.application.openTab({
+        key: `${controller.editorNamespace}:${controller.documentType}:${documentKey}`,
+        label: documentData.label,
+        icon: documentData.icon,
+        component: 'ratmd-laika-sfc-editor',
+        componentData: {
+            key: documentKey,
+            metadata: documentData.metadata,
+            document: documentData.document,
+            namespace: controller.editorNamespace,
+            documentType: controller.documentType
+        }
+    });
+}
+
 /**
  * @param {*} controller 
  * @param {*} commandObj 
@@ -41,6 +96,52 @@ function openVueSfcDocument(controller, commandObj, nodeData) {
 
 export class LaikaDocumentControllerPage extends DocumentControllerPage {
     /**
+     * @param {*} editorExtension
+     */
+    constructor(editorExtension) {
+        super(editorExtension);
+
+        this.useVueFilenamesAsNavigatorTitles();
+    }
+
+    /**
+     * Keeps Vue page nodes identifiable by their filenames while leaving
+     * October page titles and native .htm page nodes unchanged.
+     */
+    useVueFilenamesAsNavigatorTitles() {
+        const pagesNode = this.rootNavigatorNodeSafe;
+        if (!pagesNode) {
+            return;
+        }
+
+        treeviewUtils.getFlattenNodes(pagesNode.nodes).forEach((node) => {
+            const fileName = node?.userData?.filename;
+            if (typeof fileName !== 'string' || !fileName.toLowerCase().endsWith('.vue')) {
+                return;
+            }
+
+            node.label = fileName;
+            node.userData.title = fileName;
+        });
+    }
+
+    /**
+     * @param {*} commandObj
+     */
+    onNavigatorNodesUpdated(commandObj) {
+        super.onNavigatorNodesUpdated(commandObj);
+        this.useVueFilenamesAsNavigatorTitles();
+    }
+
+    /**
+     * @param {*} commandObj
+     * @param {*} payload
+     */
+    onCreateDocument(commandObj, payload) {
+        openNewTemplateDocument(this, commandObj, payload);
+    }
+
+    /**
      * @param {*} commandObj 
      * @param {*} nodeData 
      */
@@ -53,6 +154,14 @@ export class LaikaDocumentControllerPage extends DocumentControllerPage {
 
 export class LaikaDocumentControllerLayout extends DocumentControllerLayout {
     /**
+     * @param {*} commandObj
+     * @param {*} payload
+     */
+    onCreateDocument(commandObj, payload) {
+        openNewTemplateDocument(this, commandObj, payload);
+    }
+
+    /**
      * @param {*} commandObj 
      * @param {*} nodeData 
      */
@@ -64,6 +173,14 @@ export class LaikaDocumentControllerLayout extends DocumentControllerLayout {
 }
 
 export class LaikaDocumentControllerPartial extends DocumentControllerPartial {
+    /**
+     * @param {*} commandObj
+     * @param {*} payload
+     */
+    onCreateDocument(commandObj, payload) {
+        openNewTemplateDocument(this, commandObj, payload);
+    }
+
     /**
      * @param {*} commandObj 
      * @param {*} nodeData 

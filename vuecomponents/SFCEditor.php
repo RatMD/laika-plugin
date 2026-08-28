@@ -54,6 +54,9 @@ class SFCEditor extends VueComponentBase
      */
     public function getEsmModulePath(): string
     {
-        return 'plugins/ratmd/laika/vuecomponents/sfceditor/assets/js/sfceditor.js';
+        $modulePath = __DIR__ . '/sfceditor/assets/js/sfceditor.js';
+        $moduleVersion = is_file($modulePath) ? (string) filemtime($modulePath) : '1';
+
+        return 'plugins/ratmd/laika/vuecomponents/sfceditor/assets/js/sfceditor.js?v=' . $moduleVersion;
     }
 }
