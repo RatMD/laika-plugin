@@ -96,13 +96,29 @@ class Plugin extends PluginBase
 
         $this->app->singleton(Vite::class, function () {
             $theme = CmsTheme::getActiveTheme();
-            $theme = $theme->hasParentTheme() ? $theme->getParentTheme() : $theme;
-            $dirName = CmsTheme::getActiveTheme()->getDirName();
+
+            if ($theme === null) {
+                throw new \LogicException('Unable to configure Vite without an active CMS theme.');
+            }
+
+            $buildPath = $theme->getPath() . '/assets/build';
+
+            if (!is_dir($buildPath) && $theme->hasParentTheme()) {
+                $parentTheme = $theme->getParentTheme();
+                $parentBuildPath = $parentTheme?->getPath() . '/assets/build';
+
+                if ($parentTheme !== null && is_dir($parentBuildPath)) {
+                    $theme = $parentTheme;
+                }
+            }
+
+            $dirName = $theme->getDirName();
 
             $vite = new Vite;
-            $vite->useManifestFilename(".vite/manifest.json");
+            $vite->useManifestFilename('.vite/manifest.json');
             $vite->useBuildDirectory("themes/{$dirName}/assets/build");
             $vite->useHotFile(themes_path("{$dirName}/assets/.hot"));
+
             return $vite;
         });
     }
