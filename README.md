@@ -26,8 +26,8 @@ Inspired by [Inertia](https://github.com/inertiajs).
 
 ## Requirements
 
-- PHP 8.2+
-- OctoberCMS 4.0+
+- PHP 8.4+
+- OctoberCMS 4.2+
 
 ## Installation
 
@@ -35,16 +35,16 @@ Inspired by [Inertia](https://github.com/inertiajs).
 php artisan plugin:install RatMD.Laika
 ```
 
-We highly recommend installing the [SPUTNIK demo theme](https://github.com/ratmd/sputnik-theme) to
-see the full power of LAIKA using
+We highly recommend testing the [LaikaDemo theme](https://github.com/ratmd/laika-demo-theme), which 
+is based on the OctoberCMS demo-theme.
 
 ```sh
-php artisan theme:install RatMD.Sputnik
+php artisan theme:install RatMD.LaikaDemo
 ```
 
 ## Documentation
 
-*Coming Soon*
+The documentation can be found on [docs.laika.works](https://docs.laika.works).
 
 ## Copyright
 
