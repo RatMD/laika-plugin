@@ -108,11 +108,13 @@ class Head implements Arrayable
      */
     public function meta(array $attrs)
     {
-        $allowed = ['charset', 'name', 'content', 'http-equiv', 'media'];
+        $allowed = ['charset', 'name', 'property', 'content', 'http-equiv', 'media'];
+        $key = $attrs['name'] ?? $attrs['property'] ?? $attrs['http-equiv'] ?? $attrs['charset'] ?? null;
 
-        $key = $attrs['name'] ?? $attrs['http-equiv'] ?? $attrs['charset'] ?? null;
         if (empty($key) || !is_string($key)) {
-            throw new \InvalidArgumentException('meta() requires one of: name, http-equiv, charset');
+            throw new \InvalidArgumentException(
+                'meta() requires one of: name, property, http-equiv, charset'
+            );
         }
 
         return $this->set('meta', $key, $this->filter($attrs, $allowed));

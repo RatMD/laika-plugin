@@ -63,7 +63,7 @@ class Context
      * @param null|Layout $layout
      * @param null|Page $page
      * @param null|Theme $theme
-     * @param null|Site $site
+     * @param null|SiteDefinition $site
      * @return void
      */
     public function __construct(

@@ -65,13 +65,56 @@ class OctoberValue implements PayloadProvider
         // Collect Pages
         $pages = [];
         try {
+            $site = $this->context->site;
             $pagesList = Page::listInTheme($this->context->theme, true);
+            $entries = [];
+
             foreach ($pagesList as $page) {
                 /** @var \Cms\Classes\Page $page */
-                $name = Str::lower($page->getBaseFileName());
-                $pattern = (string) ($page->url ?? '');
+                $identifier = str_replace(
+                    '\\',
+                    '/',
+                    trim($page->getBaseFileName(), '/\\')
+                );
+                $name = Str::lower($identifier);
+                $pattern = (string) (
+                    ($site ? $page->getTranslatableUrl($site) : null) ?: ($page->url ?? '')
+                );
+
+                // Export the public route pattern for the active site while preserving dynamic route placeholders.
+                if ($site && $pattern !== '') {
+                    $pattern = '/' . ltrim($site->attachRoutePrefix($pattern), '/');
+                }
+
                 if ($name && $pattern) {
-                    $pages[$name] = ['pattern' => $pattern];
+                    $entries[] = [
+                        'name' => $name,
+                        'alias' => $this->pageAlias($identifier),
+                        'pattern' => $pattern,
+                    ];
+                }
+            }
+
+            // Canonical October page identifiers always win.
+            foreach ($entries as $entry) {
+                $pages[$entry['name']] = ['pattern' => $entry['pattern']];
+            }
+
+            // Add aliases only when they are unique and do not shadow a canonical page identifier.
+            $aliases = [];
+            foreach ($entries as $entry) {
+                $alias = $entry['alias'];
+
+                if ($alias === '' || isset($pages[$alias])) {
+                    continue;
+                }
+
+                $aliases[$alias] = array_key_exists($alias, $aliases) ? null : $entry['pattern'];
+            }
+
+            foreach ($aliases as $alias => $pattern) {
+                if ($pattern !== null) {
+                    $pages[$alias] = ['pattern' => $pattern];
                 }
             }
         } catch (\Throwable $exc) {
@@ -99,6 +142,24 @@ class OctoberValue implements PayloadProvider
         }
 
         return $result;
+    }
+
+    /**
+     * Return a kebab-case alias while preserving nested page paths.
+     * @param string $name
+     * @return string
+     */
+    private function pageAlias(string $name): string
+    {
+        $segments = explode('/', str_replace('\\', '/', $name));
+
+        return implode(
+            '/',
+            array_map(
+                static fn (string $segment): string => Str::kebab($segment),
+                $segments
+            )
+        );
     }
 
     /**

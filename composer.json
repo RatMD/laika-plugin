@@ -1,7 +1,7 @@
 {
     "name": "ratmd/laika-plugin",
     "type": "october-plugin",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "LAIKA is an Inertia-inspired Vue/Vite adapter which lets you build your entire OctoberCMS theme in Vue while still using everything October provides.",
     "keywords": [
         "october",

@@ -76,7 +76,7 @@ class PageValue implements PayloadProvider
 
         // Page theme
         if (empty($only) || in_array('theme', $only)) {
-            $result['theme'] = $this->context->getThemeProperty(['id', 'getDirName']);
+            $result['theme'] = $this->context->getThemeProperty(['getDirName', 'id']);
         }
 
         // Page locale
