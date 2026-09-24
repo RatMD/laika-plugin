@@ -35,11 +35,11 @@ Inspired by [Inertia](https://github.com/inertiajs).
 php artisan plugin:install RatMD.Laika
 ```
 
-We highly recommend testing the [LaikaDemo theme](https://github.com/ratmd/laika-demo-theme), which 
+We highly recommend testing the [LAIKA demonstration theme](https://github.com/ratmd/laika-demo-theme), which
 is based on the OctoberCMS demo-theme.
 
 ```sh
-php artisan theme:install RatMD.LaikaDemo
+php artisan theme:install RatMD.Laika
 ```
 
 ## Documentation

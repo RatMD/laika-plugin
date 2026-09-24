@@ -5,10 +5,11 @@ namespace RatMD\Laika\Http\Controller;
 use Flash;
 use Markdown;
 use Cms\Classes\PageManager;
-use Cms\Classes\Theme;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
+use October\Rain\Support\Facades\Site;
 
 class LaikaController
 {
@@ -19,20 +20,46 @@ class LaikaController
      */
     public function resolveLink(Request $request): RedirectResponse
     {
-        $path = trim($request->query('path', ''));
-        $theme = trim($request->query('theme', ''));
-        if (empty($path) || empty($theme)) {
+        $path = $request->query('path');
+        if (!is_string($path) || trim($path) === '') {
             Flash::add('error', 'The provided link is missing or has malformed parameters.');
             return redirect('/');
         }
 
-        $address = base64_decode($path);
+        $address = base64_decode($path, true);
         if ($address === false || trim($address) === '') {
             Flash::add('error', 'The provided link is not properly encoded.');
             return redirect('/');
         }
 
-        Theme::setActiveTheme($theme);
+        $context = $request->query('context');
+        if (!is_string($context) || $context === '' || strlen($context) > 4096) {
+            Flash::add('error', 'The provided site context is missing or malformed.');
+            return redirect('/');
+        }
+
+        try {
+            [$siteId, $host] = array_pad(explode('|', Crypt::decryptString($context), 2), 2, null);
+        } catch (\Throwable) {
+            Flash::add('error', 'The provided site context is invalid.');
+            return redirect('/');
+        }
+
+        if (
+            !is_string($siteId) || $siteId === '' ||
+            !is_string($host) || !hash_equals($host, strtolower($request->getHost()))
+        ) {
+            Flash::add('error', 'The provided site context is invalid.');
+            return redirect('/');
+        }
+
+        $site = Site::getSiteFromId($siteId);
+        if (!$site || !$site->is_enabled) {
+            Flash::add('error', 'The provided site context is unavailable.');
+            return redirect('/');
+        }
+
+        Site::applyActiveSite($site);
 
         $result = PageManager::url($address);
         if (empty($result)) {

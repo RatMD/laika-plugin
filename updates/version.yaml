@@ -1,7 +1,13 @@
 v0.1.0:
     - "Initial release of the Laika OctoberCMS extension."
 v0.1.1:
+    - "Minor Changes"
     - "Update: Support `property` attributes on server-managed meta tags."
     - "Update: Support kebab-case aliases for October page identifiers."
     - "Fix: Generate translated, site-prefixed page patterns for multisite navigation."
     - "Fix: Return theme directory names in page payloads."
+v0.1.2:
+    - "Minor Changes"
+    - "Fix: Add the required Composer installer dependency."
+    - "Fix: Resolve translations using the active October site locale."
+    - "Fix: Resolve links with a secure, request-scoped active site context."

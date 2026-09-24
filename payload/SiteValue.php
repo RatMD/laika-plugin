@@ -2,6 +2,7 @@
 
 namespace RatMD\Laika\Payload;
 
+use Illuminate\Support\Facades\Crypt;
 use RatMD\Laika\Contracts\PayloadProvider;
 use RatMD\Laika\Enums\PayloadMode;
 use RatMD\Laika\Services\Context;
@@ -33,16 +34,22 @@ class SiteValue implements PayloadProvider
      */
     public function toPayload(?array $only = null): mixed
     {
+        $site = $this->context->site;
+        $contextToken = $site
+            ? Crypt::encryptString((string) $site->id . '|' . strtolower(request()->getHost()))
+            : null;
+
         $result = [
-            'id'                => $this->context->site?->id ?? null,
-            'name'              => $this->context->site?->name ?? null,
-            'code'              => $this->context->site?->code ?? null,
-            'url'               => $this->context->site?->app_url ?? null,
-            'prefix'            => $this->context->site?->route_prefix ?? null,
-            'theme'             => $this->context->site?->theme ?? null,
-            'locale'            => $this->context->site?->locale ?? null,
-            'fallbackLocale'    => $this->context->site?->fallback_locale ?? null,
-            'timezone'          => $this->context->site?->timezone ?? null,
+            'id'                => $site?->id ?? null,
+            'name'              => $site?->name ?? null,
+            'code'              => $site?->code ?? null,
+            'url'               => $site?->app_url ?? null,
+            'prefix'            => $site?->route_prefix ?? null,
+            'theme'             => $site?->theme ?? null,
+            'locale'            => $site?->locale ?? null,
+            'fallbackLocale'    => $site?->fallback_locale ?? null,
+            'timezone'          => $site?->timezone ?? null,
+            'contextToken'      => $contextToken,
         ];
 
         if (is_array($only)) {

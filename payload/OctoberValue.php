@@ -168,12 +168,16 @@ class OctoberValue implements PayloadProvider
      */
     public function collectStrings(): array
     {
-        $currentLocale = trim(request()->getLocale());
+        $currentLocale = trim((string) (
+            $this->context->site?->locale ?: request()->getLocale()
+        ));
         if ($currentLocale === '') {
             throw new \RuntimeException('Current locale is empty.');
         }
 
-        $fallbackLocale = trim(app()->getFallbackLocale());
+        $fallbackLocale = trim((string) (
+            $this->context->site?->fallback_locale ?: app()->getFallbackLocale()
+        ));
         if ($currentLocale === $fallbackLocale || empty($fallbackLocale)) {
             $fallbackLocale = null;
         }
